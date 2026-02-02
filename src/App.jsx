@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Dashboard from './Dashboard';
 import ProjectDetails from './ProjectDetails';
 import { supabase } from './supabase';
@@ -7,69 +7,71 @@ import { X, Loader2 } from 'lucide-react';
 export default function App() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [loadingId, setLoadingId] = useState(false);
+  const [loading, setLoading] = useState(false);
   
   const [newProject, setNewProject] = useState({
     projectName: '',
-    projectId: '', // Will be fetched from DB
     projectCity: '',
     customerName: ''
   });
 
-  // --- LOGIC: Fetch Next Sequential ID ---
-  const prepareNewProject = async () => {
-    setLoadingId(true);
-    setShowCreateModal(true);
+  // --- LOGIC: Generate Custom Sequential ID ---
+  const generateCustomID = async (city) => {
     try {
-      // Get the highest project_id from the database
-      const { data, error } = await supabase
+      // 1. Get the 3-letter prefix (e.g., MUMBAI -> MUM)
+      const prefix = city.substring(0, 3).toUpperCase();
+
+      // 2. Find the highest number used so far across ALL cities
+      const { data } = await supabase
         .from('projects')
         .select('project_id')
-        .order('project_id', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(1);
 
-      if (error) throw error;
+      let nextNum;
+      if (data && data.length > 0) {
+        // Extract the number part from "MUM-1000000001"
+        const lastFullId = data[0].project_id;
+        const lastNum = parseInt(lastFullId.split('-')[1]);
+        nextNum = lastNum + 1;
+      } else {
+        // First ever project starts at 10-digit baseline
+        nextNum = 1000000001; 
+      }
 
-      // If no projects exist, start at 1001. Otherwise, increment by 1.
-      const lastId = data.length > 0 ? parseInt(data[0].project_id) : 1000;
-      const nextId = (lastId + 1).toString();
-
-      setNewProject(prev => ({ ...prev, projectId: nextId }));
+      return `${prefix}-${nextNum}`;
     } catch (err) {
-      console.error("Error generating ID:", err.message);
-      setNewProject(prev => ({ ...prev, projectId: "Error" }));
-    } finally {
-      setLoadingId(false);
+      return `ERR-${Date.now()}`;
     }
   };
 
-  // --- LOGIC: Save to Supabase ---
   const handleCreateProject = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
+      const customId = await generateCustomID(newProject.projectCity);
+
       const { data, error } = await supabase
         .from('projects')
         .insert([{
           project_name: newProject.projectName,
-          project_id: newProject.projectId,
+          project_id: customId, // e.g., "MUM-1000000001"
           project_city: newProject.projectCity,
           customer_name: newProject.customerName,
           current_stage_index: 0,
-          current_sub_step: 1, // Start at Task 1 (Floor Plan)
-          completed_sub_stages: []
+          current_sub_step: 1
         }])
         .select();
 
       if (error) throw error;
 
       setShowCreateModal(false);
-      // Open the new project immediately
       if (data) setSelectedProject(data[0]);
-      
-      // Reset form
-      setNewProject({ projectName: '', projectId: '', projectCity: '', customerName: '' });
+      setNewProject({ projectName: '', projectCity: '', customerName: '' });
     } catch (err) {
-      alert("Error creating project: " + err.message);
+      alert("Error: " + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -78,7 +80,7 @@ export default function App() {
       {!selectedProject ? (
         <Dashboard 
           onSelectProject={(proj) => setSelectedProject(proj)} 
-          onCreateNew={prepareNewProject} 
+          onCreateNew={() => setShowCreateModal(true)} 
         />
       ) : (
         <ProjectDetails 
@@ -87,61 +89,48 @@ export default function App() {
         />
       )}
 
-      {/* Create Project Modal */}
       {showCreateModal && (
         <div style={modalOverlay}>
           <div style={modalContent}>
             <div style={modalHeader}>
-              <h3>New Project Setup</h3>
+              <h3>Reset & Start New Project</h3>
               <button onClick={() => setShowCreateModal(false)} style={closeBtn}><X size={20}/></button>
             </div>
             
             <form onSubmit={handleCreateProject} style={formStyle}>
               <div style={inputGroup}>
-                <label style={label}>Project Name</label>
+                <label style={label}>City Name (for ID Prefix)</label>
                 <input 
                   required
                   style={input} 
-                  placeholder="e.g. Skyline Apartment" 
-                  value={newProject.projectName}
-                  onChange={(e) => setNewProject({...newProject, projectName: e.target.value})}
-                />
-              </div>
-
-              <div style={inputGroup}>
-                <label style={label}>City</label>
-                <input 
-                  required
-                  style={input} 
-                  placeholder="e.g. Bangalore" 
+                  placeholder="e.g. Mumbai" 
                   value={newProject.projectCity}
                   onChange={(e) => setNewProject({...newProject, projectCity: e.target.value})}
                 />
               </div>
 
               <div style={inputGroup}>
-                <label style={label}>Client Name</label>
+                <label style={label}>Project Name</label>
                 <input 
                   required
                   style={input} 
-                  placeholder="Full Name" 
+                  value={newProject.projectName}
+                  onChange={(e) => setNewProject({...newProject, projectName: e.target.value})}
+                />
+              </div>
+
+              <div style={inputGroup}>
+                <label style={label}>Customer Name</label>
+                <input 
+                  required
+                  style={input} 
                   value={newProject.customerName}
                   onChange={(e) => setNewProject({...newProject, customerName: e.target.value})}
                 />
               </div>
 
-              <div style={idInfo}>
-                {loadingId ? (
-                  <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'}}>
-                    <Loader2 className="animate-spin" size={14} /> Generating ID...
-                  </div>
-                ) : (
-                  <>Assigning Project ID: <strong>{newProject.projectId}</strong></>
-                )}
-              </div>
-
-              <button type="submit" style={submitBtn} disabled={loadingId}>
-                Initialize Project
+              <button type="submit" style={submitBtn} disabled={loading}>
+                {loading ? <Loader2 className="animate-spin" /> : "Create & Open Project"}
               </button>
             </form>
           </div>
@@ -151,14 +140,12 @@ export default function App() {
   );
 }
 
-// --- STYLES ---
-const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' };
-const modalContent = { background: '#fff', padding: '35px', borderRadius: '24px', width: '420px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.2)' };
+const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
+const modalContent = { background: '#fff', padding: '35px', borderRadius: '24px', width: '400px' };
 const modalHeader = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' };
-const closeBtn = { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' };
-const formStyle = { display: 'flex', flexDirection: 'column', gap: '18px' };
-const inputGroup = { display: 'flex', flexDirection: 'column', gap: '6px' };
-const label = { fontSize: '13px', fontWeight: '700', color: '#475569' };
-const input = { padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', fontSize: '14px' };
-const idInfo = { fontSize: '12px', color: '#2563eb', background: '#eff6ff', padding: '12px', borderRadius: '10px', textAlign: 'center', border: '1px dashed #bfdbfe' };
-const submitBtn = { background: '#1e293b', color: '#fff', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', transition: 'background 0.2s' };
+const closeBtn = { background: 'none', border: 'none', cursor: 'pointer' };
+const formStyle = { display: 'flex', flexDirection: 'column', gap: '15px' };
+const inputGroup = { display: 'flex', flexDirection: 'column', gap: '5px' };
+const label = { fontSize: '12px', fontWeight: 'bold', color: '#64748b' };
+const input = { padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' };
+const submitBtn = { background: '#1e293b', color: '#fff', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display:'flex', justifyContent:'center' };
