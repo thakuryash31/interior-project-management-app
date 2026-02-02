@@ -2,12 +2,12 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_ID.firebaseapp.com",
-  projectId: "YOUR_ID",
-  storageBucket: "YOUR_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyC8YhNIv62Go7mxfkUGntBTRhgNurTiD10",
+  authDomain: "interior-pm-app.firebaseapp.com",
+  projectId: "interior-pm-app",
+  storageBucket: "interior-pm-app.firebasestorage.app",
+  messagingSenderId: "950131054896",
+  appId: "1:950131054896:web:e7b58c9bf83219c91e10f5"
 };
 
 const app = initializeApp(firebaseConfig);
