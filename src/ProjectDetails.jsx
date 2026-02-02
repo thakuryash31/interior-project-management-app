@@ -1,32 +1,76 @@
 import React, { useState } from 'react';
 import { supabase } from './supabase';
-import { PROJECT_STAGES } from './workflowConfig';
-import { ArrowLeft, Upload, CheckCircle2, Lock, FileText, IndianRupee } from 'lucide-react';
+import { 
+  ArrowLeft, Upload, CheckCircle2, Lock, 
+  FileText, Loader2, Plus, X 
+} from 'lucide-react';
 
 export default function ProjectDetails({ project, onBack }) {
   const [updating, setUpdating] = useState(false);
-  const currentSubStep = project.current_sub_step || 1;
+  const [uploading, setUploading] = useState(null);
 
-  // --- Financial Calculations ---
-  const totalQuote = project.total_quote || 0;
-  const bookingTarget = totalQuote * 0.10; // 10% Auto-calculated
-  const actualPaid = project.initial_paid || 0;
+  // --- 1. Financial Logic ---
+  const totalQuote = Number(project.total_quote) || 0;
+  const bookingTarget = totalQuote * 0.10; // 10% auto-calculated
+  const actualPaid = Number(project.initial_paid) || 0;
   const bookingBalance = bookingTarget - actualPaid > 0 ? bookingTarget - actualPaid : 0;
   const finalBalance = totalQuote - actualPaid;
 
-  const updateAndAdvance = async (data, nextStep) => {
+  const currentSubStep = project.current_sub_step || 1;
+  const scopeOptions = ["Modular Furniture", "Movable Furniture", "False Ceiling", "Flooring", "Paint", "Electrical", "Plumbing"];
+
+  // --- 2. Update Helper ---
+  const updateData = async (fields, nextStep = null) => {
     setUpdating(true);
-    const updateData = { ...data };
-    if (nextStep) updateData.current_sub_step = nextStep;
-    
+    const payload = { ...fields };
+    if (nextStep) payload.current_sub_step = nextStep;
+
     try {
-      const { error } = await supabase.from('projects').update(updateData).eq('id', project.id);
+      const { error } = await supabase
+        .from('projects')
+        .update(payload)
+        .eq('id', project.id);
+      
       if (error) throw error;
+      alert("Progress Saved!");
     } catch (err) {
-      alert(err.message);
+      alert("Error: " + err.message);
     } finally {
       setUpdating(false);
     }
+  };
+
+  // --- 3. Upload Handler ---
+  const handleFileUpload = async (e, fieldName, nextStep) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(fieldName);
+    const filePath = `${project.project_id}/${fieldName}_${Date.now()}.${file.name.split('.').pop()}`;
+
+    try {
+      const { data, error } = await supabase.storage
+        .from('project-files')
+        .upload(filePath, file);
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('project-files')
+        .getPublicUrl(filePath);
+
+      await updateData({ [fieldName]: publicUrl }, nextStep);
+    } catch (err) {
+      alert("Upload Failed: " + err.message);
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const toggleScope = (item) => {
+    const current = project.selected_scope || [];
+    const updated = current.includes(item) ? current.filter(i => i !== item) : [...current, item];
+    updateData({ selected_scope: updated });
   };
 
   return (
@@ -35,37 +79,50 @@ export default function ProjectDetails({ project, onBack }) {
       
       <div style={cardStyle}>
         <h2>{project.project_name}</h2>
-        <p style={subtitle}>Phase 1: Initial Design Stage</p>
+        <p style={subtitle}>Initial Design Stage</p>
 
         {/* TASK 1: FLOOR PLAN */}
         <div style={taskBox(currentSubStep >= 1, currentSubStep === 1)}>
           <div style={taskHeader}>
             <h4>1. Upload Floor Plan</h4>
-            {currentSubStep > 1 && <CheckCircle2 color="#22c55e" />}
+            {currentSubStep > 1 && <CheckCircle2 color="#22c55e" size={20} />}
           </div>
-          {currentSubStep === 1 ? (
-            <label style={uploadBtn}>
-              <Upload size={16} /> Select Floor Plan
-              <input type="file" hidden onChange={(e) => {/* Handle upload then updateAndAdvance({}, 2) */}} />
+          {currentSubStep === 1 && (
+            <label style={uploadBtn(uploading === 'floor_plan_url')}>
+              {uploading === 'floor_plan_url' ? <Loader2 className="animate-spin" size={16}/> : <Upload size={16} />}
+              Upload Floor Plan
+              <input type="file" hidden onChange={(e) => handleFileUpload(e, 'floor_plan_url', 2)} />
             </label>
-          ) : <p style={doneText}>{project.floor_plan_url ? "File Uploaded" : "Skipped"}</p>}
+          )}
+          {project.floor_plan_url && <a href={project.floor_plan_url} target="_blank" style={linkStyle}><FileText size={14}/> View Plan</a>}
         </div>
 
-        {/* TASK 2: REQUIREMENTS & SCOPE */}
+        {/* TASK 2: SCOPE OF WORK */}
         <div style={taskBox(currentSubStep >= 2, currentSubStep === 2)}>
           <div style={taskHeader}>
-            <h4>2. Need Gathering & Scope</h4>
-            {currentSubStep < 2 ? <Lock size={16} color="#94a3b8" /> : currentSubStep > 2 ? <CheckCircle2 color="#22c55e" /> : null}
+            <h4>2. Customer Needs & Scope</h4>
+            {currentSubStep < 2 ? <Lock size={16} color="#94a3b8" /> : currentSubStep > 2 ? <CheckCircle2 color="#22c55e" size={20}/> : null}
           </div>
           {currentSubStep === 2 && (
             <div>
-              <textarea style={input} placeholder="Describe customer needs..." onBlur={(e) => updateAndAdvance({customer_notes: e.target.value})} />
+              <textarea 
+                style={input} 
+                placeholder="Type customer requirements here..." 
+                defaultValue={project.customer_notes}
+                onBlur={(e) => updateData({ customer_notes: e.target.value })}
+              />
               <div style={tagGrid}>
-                {["Modular Furniture", "False Ceiling", "Flooring", "Paint", "Electrical"].map(item => (
-                   <button key={item} style={tagStyle}>{item}</button>
+                {scopeOptions.map(item => (
+                  <button 
+                    key={item} 
+                    onClick={() => toggleScope(item)}
+                    style={project.selected_scope?.includes(item) ? activeTag : inactiveTag}
+                  >
+                    {item} {project.selected_scope?.includes(item) ? <X size={12}/> : <Plus size={12}/>}
+                  </button>
                 ))}
               </div>
-              <button style={nextBtn} onClick={() => updateAndAdvance({}, 3)}>Complete Scope</button>
+              <button style={nextBtn} onClick={() => updateData({}, 3)}>Save & Unlock Task 3</button>
             </div>
           )}
         </div>
@@ -74,43 +131,45 @@ export default function ProjectDetails({ project, onBack }) {
         <div style={taskBox(currentSubStep >= 3, currentSubStep === 3)}>
           <div style={taskHeader}>
             <h4>3. Upload Quotation</h4>
-            {currentSubStep < 3 ? <Lock size={16} color="#94a3b8" /> : null}
+            {currentSubStep < 3 ? <Lock size={16} color="#94a3b8" /> : currentSubStep > 3 ? <CheckCircle2 color="#22c55e" size={20}/> : null}
           </div>
           {currentSubStep === 3 && (
-            <label style={uploadBtn}>
-               <Upload size={16} /> Upload Quote PDF
-               <input type="file" hidden onChange={() => updateAndAdvance({quote_url: '...'}, 4)} />
+            <label style={uploadBtn(uploading === 'quote_url')}>
+              {uploading === 'quote_url' ? <Loader2 className="animate-spin" size={16}/> : <Upload size={16} />}
+              Upload Quote PDF
+              <input type="file" hidden onChange={(e) => handleFileUpload(e, 'quote_url', 4)} />
             </label>
           )}
+          {project.quote_url && <a href={project.quote_url} target="_blank" style={linkStyle}><FileText size={14}/> View Quote</a>}
         </div>
 
-        {/* TASK 4: FINAL VALUES & BOOKING */}
+        {/* TASK 4: FINANCE SUMMARY */}
         <div style={taskBox(currentSubStep >= 4, currentSubStep === 4)}>
           <div style={taskHeader}>
-            <h4>4. Payment & Booking Summary</h4>
-            {currentSubStep < 4 ? <Lock size={16} color="#94a3b8" /> : null}
+            <h4>4. Final Quote & Booking Payment</h4>
+            {currentSubStep < 4 && <Lock size={16} color="#94a3b8" />}
           </div>
           {currentSubStep === 4 && (
             <div style={financeGrid}>
               <div style={valBox}>
-                <label>Total Quote</label>
-                <input type="number" style={input} defaultValue={totalQuote} onBlur={(e) => updateAndAdvance({total_quote: Number(e.target.value)})} />
+                <label style={miniLabel}>Total Quote Value (₹)</label>
+                <input type="number" style={input} defaultValue={totalQuote} onBlur={(e) => updateData({total_quote: Number(e.target.value)})} />
               </div>
               <div style={valBox}>
-                <label>Booking Amount (10%)</label>
+                <label style={miniLabel}>10% Booking Target</label>
                 <div style={autoVal}>₹ {bookingTarget.toLocaleString()}</div>
               </div>
               <div style={valBox}>
-                <label>Actual Customer Paid</label>
-                <input type="number" style={input} defaultValue={actualPaid} onBlur={(e) => updateAndAdvance({initial_paid: Number(e.target.value)})} />
+                <label style={miniLabel}>Customer Paid (₹)</label>
+                <input type="number" style={input} defaultValue={actualPaid} onBlur={(e) => updateData({initial_paid: Number(e.target.value)})} />
               </div>
               <div style={valBox}>
-                <label>Booking Balance</label>
-                <div style={autoVal}>₹ {bookingBalance.toLocaleString()}</div>
+                <label style={miniLabel}>Booking Balance Due</label>
+                <div style={{...autoVal, color: bookingBalance > 0 ? '#ef4444' : '#22c55e'}}>₹ {bookingBalance.toLocaleString()}</div>
               </div>
               <div style={totalBox}>
-                <label>Final Balance Due</label>
-                <div style={{fontSize: '20px', fontWeight: '800'}}>₹ {finalBalance.toLocaleString()}</div>
+                <label style={{color:'#94a3b8', fontSize:'12px'}}>Final Overall Balance</label>
+                <div style={{fontSize:'24px', fontWeight:'800'}}>₹ {finalBalance.toLocaleString()}</div>
               </div>
             </div>
           )}
@@ -121,25 +180,26 @@ export default function ProjectDetails({ project, onBack }) {
 }
 
 // --- STYLES ---
-const containerStyle = { padding: '40px 10%', background: '#f8fafc', minHeight: '100vh' };
-const backBtn = { border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', marginBottom: '20px', fontWeight: 'bold' };
-const cardStyle = { background: '#fff', padding: '40px', borderRadius: '24px', border: '1px solid #e2e8f0' };
-const subtitle = { color: '#64748b', marginBottom: '30px', fontSize: '14px' };
+const containerStyle = { padding: '40px 10%', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' };
+const backBtn = { border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', marginBottom: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' };
+const cardStyle = { background: '#fff', padding: '40px', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' };
+const subtitle = { color: '#64748b', marginBottom: '30px', fontSize: '14px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '1px' };
 const taskBox = (unlocked, active) => ({
-  padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '16px',
+  padding: '25px', borderRadius: '18px', border: active ? '2px solid #2563eb' : '1px solid #e2e8f0', marginBottom: '20px',
   background: active ? '#fff' : unlocked ? '#f8fafc' : '#f1f5f9',
-  opacity: unlocked ? 1 : 0.5,
-  boxShadow: active ? '0 10px 15px -3px rgba(37, 99, 235, 0.1)' : 'none',
-  borderLeft: active ? '6px solid #2563eb' : '1px solid #e2e8f0'
+  opacity: unlocked ? 1 : 0.6,
+  transition: '0.3s'
 });
-const taskHeader = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' };
-const input = { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '8px' };
-const uploadBtn = { background: '#2563eb', color: '#fff', padding: '12px 20px', borderRadius: '8px', display: 'inline-flex', gap: '10px', cursor: 'pointer', marginTop: '10px', fontSize: '14px' };
+const taskHeader = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' };
+const input = { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginTop: '10px', outline: 'none' };
+const uploadBtn = (load) => ({ background: load ? '#94a3b8' : '#2563eb', color: '#fff', padding: '12px 20px', borderRadius: '10px', display: 'inline-flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginTop: '10px', fontSize: '14px', fontWeight: '600' });
 const financeGrid = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' };
-const valBox = { background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' };
-const autoVal = { fontSize: '18px', fontWeight: 'bold', color: '#1e293b', marginTop: '5px' };
-const totalBox = { gridColumn: 'span 2', background: '#1e293b', color: '#fff', padding: '20px', borderRadius: '12px', textAlign: 'center' };
-const nextBtn = { width: '100%', marginTop: '20px', padding: '12px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' };
+const valBox = { background: '#fff', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0' };
+const autoVal = { fontSize: '18px', fontWeight: 'bold', color: '#1e293b', marginTop: '8px' };
+const totalBox = { gridColumn: 'span 2', background: '#1e293b', color: '#fff', padding: '25px', borderRadius: '15px', textAlign: 'center' };
+const nextBtn = { width: '100%', marginTop: '20px', padding: '14px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' };
 const tagGrid = { display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '15px' };
-const tagStyle = { padding: '6px 12px', borderRadius: '20px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '12px' };
-const doneText = { fontSize: '13px', color: '#22c55e', fontWeight: 'bold' };
+const inactiveTag = { padding: '8px 15px', borderRadius: '20px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' };
+const activeTag = { ...inactiveTag, background: '#2563eb', color: '#fff', border: '1px solid #2563eb' };
+const miniLabel = { fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' };
+const linkStyle = { color: '#2563eb', fontSize: '12px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '10px', fontWeight: '600' };
