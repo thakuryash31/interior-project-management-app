@@ -71,4 +71,63 @@ export default function Dashboard() {
               <div style={{ display: 'grid', gap: '10px', marginBottom: '20px' }}>
                 <div style={infoRow}>
                   <Building2 size={16} color="#2563eb" /> 
-                  <span style={{ color: '#475569'
+                  <span style={{ color: '#475569' }}>{project.customerName}</span>
+                </div>
+                <div style={infoRow}>
+                  <MapPin size={16} color="#2563eb" /> 
+                  <span style={{ color: '#475569' }}>{project.projectCity}, {project.state || 'India'}</span>
+                </div>
+              </div>
+
+              {/* Progress Bar UI */}
+              <div style={{ marginTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '8px' }}>
+                  <span>PROJECT COMPLETION</span>
+                  <span>{project.progress || 0}%</span>
+                </div>
+                <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '10px' }}>
+                  <div style={{ width: `${project.progress || 0}%`, height: '100%', background: '#2563eb', borderRadius: '10px' }} />
+                </div>
+              </div>
+
+              <div style={{ marginTop: '25px', paddingTop: '20px', borderTop: '1px solid #f1f5f9', fontSize: '13px', color: '#94a3b8' }}>
+                Site: {project.projectAddress}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Styles ---
+const cardStyle = {
+  backgroundColor: '#fff',
+  borderRadius: '24px',
+  padding: '30px',
+  border: '1px solid #f1f5f9',
+  boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1)',
+  transition: 'transform 0.2s, box-shadow 0.2s',
+  cursor: 'default'
+};
+
+const badgeStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '5px',
+  fontSize: '11px',
+  fontWeight: '800',
+  color: '#2563eb',
+  backgroundColor: '#eff6ff',
+  padding: '6px 12px',
+  borderRadius: '20px',
+  letterSpacing: '0.5px'
+};
+
+const infoRow = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
+  fontSize: '15px'
+};
