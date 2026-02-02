@@ -1,224 +1,160 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { db } from './firebase';
 import { doc, updateDoc } from "firebase/firestore";
 import { PROJECT_STAGES } from './workflowConfig';
 import { 
   ArrowLeft, CheckCircle2, ClipboardList, Info, 
-  Calendar, ChevronRight, Layout, CheckSquare 
+  Calendar, ChevronRight, Layout, Upload, Plus, X, Search
 } from 'lucide-react';
 
 export default function ProjectDetails({ project, onBack }) {
-  // Use the saved stage index from the database, or default to 0
   const [activeStageIndex, setActiveStageIndex] = useState(project.currentStageIndex || 0);
   const [updating, setUpdating] = useState(false);
+  const [reqSearch, setReqSearch] = useState("");
 
-  // Calculate if the CURRENTLY VIEWED stage is fully finished
-  const currentViewSubStages = PROJECT_STAGES[activeStageIndex].subStages;
-  const isCurrentViewFinished = currentViewSubStages.every(s => 
-    project.completedSubStages?.includes(s)
-  );
+  const requirementsList = [
+    "Modular furniture", "Movable Furniture", "False Ceiling", 
+    "Flooring", "Electrical Work", "Plumbing work"
+  ];
 
-  // --- LOGIC: Toggle Sub-Stages ---
-  const handleToggleSubStage = async (subStageName) => {
+  // Helper to update specific project data
+  const updateProjectField = async (data) => {
     setUpdating(true);
-    const currentCompleted = project.completedSubStages || [];
-    let updatedList;
-
-    if (currentCompleted.includes(subStageName)) {
-      updatedList = currentCompleted.filter(item => item !== subStageName);
-    } else {
-      updatedList = [...currentCompleted, subStageName];
-    }
-
-    // Calculate Progress Percentage across ALL 4 stages
-    const totalSubStages = PROJECT_STAGES.reduce((acc, stage) => acc + stage.subStages.length, 0);
-    const newProgress = Math.round((updatedList.length / totalSubStages) * 100);
-
     try {
       const projectRef = doc(db, "projects", project.id);
-      await updateDoc(projectRef, {
-        completedSubStages: updatedList,
-        progress: newProgress,
-        lastUpdated: new Date()
-      });
-    } catch (error) {
-      console.error("Error updating sub-stage:", error);
-    } finally {
-      setUpdating(false);
-    }
+      await updateDoc(projectRef, { ...data, lastUpdated: new Date() });
+    } catch (e) { console.error(e); }
+    finally { setUpdating(false); }
   };
 
-  // --- LOGIC: Move to Next Major Stage ---
-  const handleMoveToNextStage = async () => {
-    if (activeStageIndex < PROJECT_STAGES.length - 1) {
-      const nextIndex = activeStageIndex + 1;
-      setUpdating(true);
-      try {
-        const projectRef = doc(db, "projects", project.id);
-        await updateDoc(projectRef, {
-          currentStageIndex: nextIndex,
-          lastStageUpdate: new Date()
-        });
-        setActiveStageIndex(nextIndex);
-      } catch (error) {
-        console.error("Error moving stage:", error);
-      } finally {
-        setUpdating(false);
-      }
-    }
+  // Logic to handle requirements (Movable, Modular etc)
+  const toggleRequirement = (req) => {
+    const current = project.selectedRequirements || [];
+    const updated = current.includes(req) ? current.filter(r => r !== req) : [...current, req];
+    updateProjectField({ selectedRequirements: updated });
   };
 
   return (
     <div style={{ padding: '40px 5%', backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: "'Inter', sans-serif" }}>
       
-      {/* Header Navigation */}
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <button 
-          onClick={onBack} 
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold' }}
-        >
-          <ArrowLeft size={20} /> Back to Dashboard
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#64748b', fontSize: '14px' }}>
-          <Calendar size={16} /> Last Update: {project.lastUpdated?.toDate().toLocaleDateString() || 'Recently'}
-        </div>
+        <button onClick={onBack} style={backBtnStyle}><ArrowLeft size={20} /> Dashboard</button>
+        <div style={{ fontSize: '14px', color: '#64748b' }}>Project: <span style={{fontWeight: '700', color: '#1e293b'}}>{project.projectName}</span></div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '30px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '30px' }}>
         
-        {/* LEFT COLUMN: Main Workflow */}
-        <div style={{ background: '#fff', padding: '40px', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-          <div style={{ marginBottom: '40px' }}>
-            <h2 style={{ fontSize: '28px', color: '#1e293b', margin: '0 0 8px 0' }}>{project.projectName}</h2>
-            <p style={{ color: '#64748b', margin: 0 }}>ID: {project.projectId} • Client: {project.customerName}</p>
+        <div style={mainCardStyle}>
+          {/* Stage Tracker */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '40px' }}>
+            {PROJECT_STAGES.map((stage, index) => (
+              <div key={stage.id} onClick={() => setActiveStageIndex(index)} style={{ flex: 1, textAlign: 'center', cursor: 'pointer', opacity: activeStageIndex === index ? 1 : 0.4 }}>
+                <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: index <= (project.currentStageIndex || 0) ? '#2563eb' : '#e2e8f0', margin: '0 auto', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>{index + 1}</div>
+                <div style={{ fontSize: '10px', fontWeight: 'bold', marginTop: '8px', color: '#1e293b' }}>{stage.name}</div>
+              </div>
+            ))}
           </div>
 
-          {/* --- STAGE PROGRESS TRACKER (THE 4 MAIN STAGES) --- */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', marginBottom: '50px' }}>
-            <div style={{ position: 'absolute', top: '20px', left: '0', right: '0', height: '2px', background: '#f1f5f9', zIndex: 0 }}></div>
-            
-            {PROJECT_STAGES.map((stage, index) => {
-              const isCompleted = index < (project.currentStageIndex || 0);
-              const isCurrent = index === (project.currentStageIndex || 0);
-              const isSelectedView = activeStageIndex === index;
-
-              return (
-                <div 
-                  key={stage.id} 
-                  onClick={() => setActiveStageIndex(index)}
-                  style={{ zIndex: 1, textAlign: 'center', flex: 1, cursor: 'pointer' }}
-                >
-                  <div style={{ 
-                    width: '40px', height: '40px', borderRadius: '50%', margin: '0 auto',
-                    background: isCompleted ? '#22c55e' : (isCurrent ? '#2563eb' : '#fff'),
-                    border: `2px solid ${isCompleted ? '#22c55e' : (isCurrent ? '#2563eb' : '#e2e8f0')}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                    color: (isCompleted || isCurrent) ? '#fff' : '#94a3b8',
-                    boxShadow: isSelectedView ? '0 0 0 4px #dbeafe' : 'none',
-                    transition: '0.3s'
-                  }}>
-                    {isCompleted ? <CheckCircle2 size={20} /> : index + 1}
-                  </div>
-                  <p style={{ 
-                    fontSize: '11px', fontWeight: '700', marginTop: '12px', 
-                    color: isSelectedView ? '#2563eb' : (isCompleted ? '#22c55e' : '#64748b'),
-                    textTransform: 'uppercase'
-                  }}>
-                    {stage.name}
-                  </p>
+          {/* DYNAMIC CONTENT FOR INITIAL DESIGN PHASE */}
+          {activeStageIndex === 0 ? (
+            <div style={{ display: 'grid', gap: '25px' }}>
+              
+              {/* 1. Floor Plan Upload */}
+              <div style={taskRowStyle}>
+                <div>
+                  <h4 style={taskTitleStyle}>1. Floor Plan</h4>
+                  <p style={taskDescStyle}>Upload the site measurement drawing.</p>
                 </div>
-              );
-            })}
-          </div>
+                <label style={uploadBtnStyle}>
+                  <Upload size={18} /> {project.floorPlanUrl ? 'Update Plan' : 'Upload PDF/Img'}
+                  <input type="file" style={{ display: 'none' }} />
+                </label>
+              </div>
 
-          {/* --- NEXT STAGE ACTION CARD --- */}
-          <div style={{ 
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-            marginBottom: '30px', padding: '20px', borderRadius: '16px',
-            background: isCurrentViewFinished ? '#f0fdf4' : '#f8fafc',
-            border: `1px solid ${isCurrentViewFinished ? '#22c55e' : '#e2e8f0'}`,
-          }}>
-            <div>
-              <h4 style={{ margin: 0, color: '#1e293b', fontSize: '15px' }}>Stage Status</h4>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
-                {isCurrentViewFinished 
-                  ? "All tasks in this stage are complete." 
-                  : "Complete all sub-stages below to proceed."}
-              </p>
-            </div>
-            {activeStageIndex === (project.currentStageIndex || 0) && activeStageIndex < PROJECT_STAGES.length - 1 && (
+              {/* 2. Requirement Gathering */}
+              <div style={taskRowStyle}>
+                <div style={{ width: '100%' }}>
+                  <h4 style={taskTitleStyle}>2. Customer Requirement Gathering</h4>
+                  <textarea 
+                    placeholder="Type specific customer notes here..."
+                    style={textAreaStyle}
+                    value={project.customerNotes || ""}
+                    onBlur={(e) => updateProjectField({ customerNotes: e.target.value })}
+                  />
+                  
+                  <div style={{ marginTop: '15px' }}>
+                    <div style={{ position: 'relative', marginBottom: '10px' }}>
+                      <Search size={16} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94a3b8' }} />
+                      <input 
+                        placeholder="Search services (Modular, Flooring...)" 
+                        style={searchInputStyle}
+                        onChange={(e) => setReqSearch(e.target.value)}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {requirementsList.filter(r => r.toLowerCase().includes(reqSearch.toLowerCase())).map(req => (
+                        <button 
+                          key={req}
+                          onClick={() => toggleRequirement(req)}
+                          style={project.selectedRequirements?.includes(req) ? tagStyleActive : tagStyle}
+                        >
+                          {req} {project.selectedRequirements?.includes(req) ? <X size={12}/> : <Plus size={12}/>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Quotation Section */}
+              <div style={taskRowStyle}>
+                <div style={{ width: '100%' }}>
+                  <h4 style={taskTitleStyle}>3. Quotation & Payments</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginTop: '15px' }}>
+                    <div>
+                      <label style={miniLabel}>Total Quote (₹)</label>
+                      <input type="number" placeholder="0" style={miniInput} onBlur={(e) => updateProjectField({ totalQuote: e.target.value })} defaultValue={project.totalQuote} />
+                    </div>
+                    <div>
+                      <label style={miniLabel}>Initial Paid (₹)</label>
+                      <input type="number" placeholder="0" style={miniInput} onBlur={(e) => updateProjectField({ initialPaid: e.target.value })} defaultValue={project.initialPaid} />
+                    </div>
+                    <div style={{ background: '#f1f5f9', padding: '10px', borderRadius: '8px' }}>
+                      <label style={miniLabel}>Balance Payment</label>
+                      <div style={{ fontWeight: 'bold', color: '#ef4444' }}>₹ {(project.totalQuote || 0) - (project.initialPaid || 0)}</div>
+                    </div>
+                  </div>
+                  <label style={{ ...uploadBtnStyle, marginTop: '15px', width: 'fit-content' }}>
+                    <Upload size={18} /> Upload Quote PDF
+                    <input type="file" style={{ display: 'none' }} />
+                  </label>
+                </div>
+              </div>
+
               <button 
-                disabled={!isCurrentViewFinished || updating}
-                onClick={handleMoveToNextStage}
-                style={{
-                  padding: '10px 20px', borderRadius: '10px', border: 'none',
-                  background: isCurrentViewFinished ? '#22c55e' : '#cbd5e1',
-                  color: '#fff', fontWeight: 'bold', cursor: isCurrentViewFinished ? 'pointer' : 'not-allowed',
-                  display: 'flex', alignItems: 'center', gap: '8px', transition: '0.2s'
-                }}
+                onClick={() => updateProjectField({ currentStageIndex: 1 })}
+                style={promoteBtnStyle}
               >
-                Promote to Next Stage <ChevronRight size={18} />
+                Complete Initial Phase & Move to Details <ChevronRight size={18} />
               </button>
-            )}
-          </div>
 
-          {/* --- SUB-STAGES CHECKLIST --- */}
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {PROJECT_STAGES[activeStageIndex].subStages.map((sub, i) => {
-              const isDone = project.completedSubStages?.includes(sub);
-              return (
-                <div 
-                  key={i} 
-                  onClick={() => !updating && handleToggleSubStage(sub)}
-                  style={{ 
-                    display: 'flex', alignItems: 'center', gap: '15px', padding: '18px', 
-                    background: '#fff', borderRadius: '12px', 
-                    border: isDone ? '1px solid #2563eb' : '1px solid #e2e8f0',
-                    cursor: updating ? 'not-allowed' : 'pointer',
-                    transition: '0.2s',
-                    boxShadow: isDone ? '0 4px 12px rgba(37, 99, 235, 0.05)' : 'none'
-                  }}
-                >
-                  <div style={{
-                    width: '22px', height: '22px', borderRadius: '6px',
-                    border: `2px solid ${isDone ? '#2563eb' : '#cbd5e1'}`,
-                    background: isDone ? '#2563eb' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    {isDone && <CheckCircle2 size={14} color="#fff" />}
-                  </div>
-                  <span style={{ 
-                    fontWeight: '500', color: isDone ? '#1e293b' : '#64748b', fontSize: '15px',
-                    textDecoration: isDone ? 'line-through' : 'none'
-                  }}>
-                    {sub}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '50px', color: '#64748b' }}>
+              Details for {PROJECT_STAGES[activeStageIndex].name} are being processed.
+            </div>
+          )}
         </div>
 
-        {/* RIGHT COLUMN: Summary Sidebar */}
+        {/* Sidebar */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={sidebarCard}>
-            <h4 style={sidebarTitle}><Layout size={16} /> Overall Progress</h4>
-            <div style={{ marginTop: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold', marginBottom: '8px' }}>
-                  <span style={{ color: '#64748b' }}>TOTAL PROJECT</span>
-                  <span style={{ color: '#2563eb' }}>{project.progress || 0}%</span>
-                </div>
-                <div style={{ width: '100%', height: '10px', background: '#f1f5f9', borderRadius: '10px' }}>
-                  <div style={{ width: `${project.progress || 0}%`, height: '100%', background: '#2563eb', borderRadius: '10px', transition: 'width 0.5s ease' }} />
-                </div>
-            </div>
-          </div>
-
-          <div style={sidebarCard}>
-            <h4 style={sidebarTitle}><Info size={16} /> Site Location</h4>
-            <div style={{ marginTop: '15px', fontSize: '14px', color: '#475569', lineHeight: '1.6' }}>
-              <strong>{project.projectCity}</strong><br />
-              {project.projectAddress}
+          <div style={mainCardStyle}>
+            <h4 style={taskTitleStyle}>Project Summary</h4>
+            <div style={{ marginTop: '15px', fontSize: '14px' }}>
+              <div style={summaryRow}><span>Phase:</span> <strong>{PROJECT_STAGES[project.currentStageIndex || 0].name}</strong></div>
+              <div style={summaryRow}><span>City:</span> <strong>{project.projectCity}</strong></div>
+              <div style={summaryRow}><span>Progress:</span> <strong>{project.progress || 0}%</strong></div>
             </div>
           </div>
         </div>
@@ -227,5 +163,18 @@ export default function ProjectDetails({ project, onBack }) {
   );
 }
 
-const sidebarCard = { background: '#fff', padding: '24px', borderRadius: '20px', border: '1px solid #e2e8f0' };
-const sidebarTitle = { margin: 0, fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase', letterSpacing: '1px' };
+// --- STYLES ---
+const mainCardStyle = { background: '#fff', padding: '30px', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' };
+const taskRowStyle = { padding: '20px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' };
+const backBtnStyle = { display: 'flex', alignItems: 'center', gap: '8px', border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold' };
+const taskTitleStyle = { margin: 0, fontSize: '16px', color: '#1e293b', fontWeight: '700' };
+const taskDescStyle = { margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' };
+const uploadBtnStyle = { display: 'flex', alignItems: 'center', gap: '8px', background: '#fff', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', color: '#475569' };
+const textAreaStyle = { width: '100%', marginTop: '10px', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', minHeight: '80px', fontFamily: 'inherit' };
+const searchInputStyle = { width: '100%', padding: '8px 8px 8px 35px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' };
+const tagStyle = { display: 'flex', alignItems: 'center', gap: '5px', background: '#fff', border: '1px solid #e2e8f0', padding: '5px 12px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer' };
+const tagStyleActive = { ...tagStyle, background: '#2563eb', color: '#fff', border: '1px solid #2563eb' };
+const miniLabel = { fontSize: '10px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase' };
+const miniInput = { width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0', marginTop: '5px' };
+const promoteBtnStyle = { width: '100%', padding: '15px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginTop: '10px' };
+const summaryRow = { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f1f5f9' };
