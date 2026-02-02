@@ -1,17 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { db } from './firebase'; 
 import { collection, query, onSnapshot, orderBy } from "firebase/firestore";
-import { Layout, Building2, MapPin, Hash, Loader2 } from 'lucide-react';
+import { Building2, MapPin, Hash, Loader2, Plus, ArrowUpRight, Clock } from 'lucide-react';
 
 export default function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Reference the 'projects' collection and order by newest first
     const q = query(collection(db, "projects"), orderBy("createdAt", "desc"));
-
-    // 2. Set up a real-time listener
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const projectsArr = [];
       querySnapshot.forEach((doc) => {
@@ -19,70 +16,59 @@ export default function Dashboard() {
       });
       setProjects(projectsArr);
       setLoading(false);
-    }, (error) => {
-      console.error("Error fetching projects: ", error);
-      setLoading(false);
     });
-
-    // 3. Clean up the listener when the component unmounts
     return () => unsubscribe();
   }, []);
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <Loader2 className="animate-spin" size={40} color="#666" />
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+        <Loader2 className="animate-spin" size={40} color="#2563eb" />
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '40px', backgroundColor: '#f9f9f9', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-      <header style={{ marginBottom: '30px' }}>
-        <h1 style={{ margin: 0, color: '#1a1a1a' }}>Project Pipeline</h1>
-        <p style={{ color: '#666' }}>Showing {projects.length} active interior design projects</p>
-      </header>
+    <div style={{ padding: '40px 5%', backgroundColor: '#f8fafc', minHeight: '100vh' }}>
+      
+      {/* --- DASHBOARD HEADER --- */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '40px' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '28px', fontWeight: '800', color: '#1e293b' }}>Active Workspace</h1>
+          <p style={{ color: '#64748b', marginTop: '5px' }}>You have {projects.length} ongoing design projects.</p>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', color: '#64748b', fontSize: '14px', fontWeight: '500' }}>
+           <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><Clock size={16}/> Last updated: Just now</span>
+        </div>
+      </div>
 
       {projects.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '50px', background: '#fff', borderRadius: '12px' }}>
-          <p style={{ color: '#999' }}>No projects found. Go to the "New Project" tab to add one!</p>
+        <div style={{ textAlign: 'center', padding: '100px 20px', background: '#fff', borderRadius: '24px', border: '2px dashed #e2e8f0' }}>
+          <div style={{ background: '#eff6ff', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 20px' }}>
+            <Plus color="#2563eb" />
+          </div>
+          <h3 style={{ color: '#1e293b' }}>No projects found</h3>
+          <p style={{ color: '#64748b' }}>Start by creating your first interior project in the "New Project" tab.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '24px' }}>
           {projects.map((project) => (
-            <div key={project.id} style={{ 
-              backgroundColor: '#fff', 
-              borderRadius: '16px', 
-              padding: '24px', 
-              boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
-              border: '1px solid #eee' 
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
-                <h3 style={{ margin: 0, fontSize: '18px', color: '#2c3e50' }}>{project.projectName}</h3>
-                <span style={{ fontSize: '11px', fontWeight: 'bold', background: '#f0f0f0', padding: '4px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Hash size={12} /> {project.projectId}
-                </span>
+            <div key={project.id} style={cardStyle}>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <div style={badgeStyle}>
+                   <Hash size={12} /> {project.projectId}
+                </div>
+                <button style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                  <ArrowUpRight size={18} />
+                </button>
               </div>
 
-              <div style={{ marginBottom: '15px' }}>
-                <p style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#666', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Building2 size={14} /> <strong>Client:</strong> {project.customerName}
-                </p>
-                <p style={{ margin: 0, fontSize: '14px', color: '#666', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <MapPin size={14} /> <strong>Location:</strong> {project.projectCity}
-                </p>
-              </div>
+              <h3 style={{ margin: '0 0 10px 0', fontSize: '20px', fontWeight: '700', color: '#1e293b' }}>
+                {project.projectName}
+              </h3>
 
-              <div style={{ borderTop: '1px solid #f5f5f5', paddingTop: '15px', marginTop: '15px' }}>
-                <p style={{ margin: 0, fontSize: '12px', color: '#999', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Site Address</p>
-                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#444', lineHeight: '1.4' }}>
-                  {project.projectAddress || 'No address provided'}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+              <div style={{ display: 'grid', gap: '10px', marginBottom: '20px' }}>
+                <div style={infoRow}>
+                  <Building2 size={16} color="#2563eb" /> 
+                  <span style={{ color: '#475569'
