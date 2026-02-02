@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { supabase } from './supabase';
 import Dashboard from './Dashboard';
 import ProjectDetails from './ProjectDetails';
-import { X, MapPin, User, Globe, Phone, Mail, Loader2, Plus } from 'lucide-react';
+import { X, MapPin, User, Globe, Loader2 } from 'lucide-react';
 
-// Dropdown Constants
-const INDIAN_STATES = ["Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"];
-const COUNTRIES = ["India", "UAE", "USA", "UK", "Australia", "Singapore"];
+// --- DATA LISTS ---
+const COUNTRIES = ["India", "UAE", "USA", "UK", "Singapore"];
+const INDIAN_STATES = ["Maharashtra", "Karnataka", "Delhi", "Gujarat", "Tamil Nadu", "Telangana", "West Bengal", "Other"];
+// You can expand this list or use an API, but here are the majors for the dropdown:
+const POPULAR_CITIES = ["Mumbai", "Bengaluru", "Delhi", "Hyderabad", "Ahmedabad", "Chennai", "Kolkata", "Pune", "Surat", "Jaipur", "Lucknow", "Other"];
 
 export default function App() {
   const [selectedProject, setSelectedProject] = useState(null);
@@ -19,25 +21,23 @@ export default function App() {
     customerEmail: '',
     customerPhone: '',
     billingAddress: '',
-    billingCity: '',
-    billingState: '',
+    billingCity: 'Mumbai',
+    billingState: 'Maharashtra',
     billingPincode: '',
     billingCountry: 'India',
-    projectCity: '',
-    projectState: '',
+    projectCity: 'Mumbai',
+    projectState: 'Maharashtra',
     projectPincode: '',
     projectCountry: 'India'
   });
 
-  // --- LOGIC: Create Project with Sequential ID ---
   const handleCreateProject = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // 1. Generate ID: Prefix (3 letters) + Series (10 digits)
-      const prefix = (form.projectCity || "PRJ").substring(0, 3).toUpperCase();
-      
+      // 1. Generate Prefix-ID (e.g., MUM-1000000001)
+      const prefix = form.projectCity.substring(0, 3).toUpperCase();
       const { data: lastProjects } = await supabase
         .from('projects')
         .select('project_id')
@@ -45,15 +45,12 @@ export default function App() {
         .limit(1);
 
       let nextNum = 1000000001;
-      if (lastProjects && lastProjects.length > 0) {
-        const lastFullId = lastProjects[0].project_id;
-        if (lastFullId.includes('-')) {
-          nextNum = parseInt(lastFullId.split('-')[1]) + 1;
-        }
+      if (lastProjects && lastProjects[0]?.project_id.includes('-')) {
+        nextNum = parseInt(lastProjects[0].project_id.split('-')[1]) + 1;
       }
       const customId = `${prefix}-${nextNum}`;
 
-      // 2. Insert into Supabase
+      // 2. Insert ALL fields to Supabase
       const { data, error } = await supabase
         .from('projects')
         .insert([{
@@ -81,15 +78,14 @@ export default function App() {
       setShowCreateModal(false);
       if (data) setSelectedProject(data[0]);
     } catch (err) {
-      alert("Error: " + err.message);
+      alert("Error saving to database: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh', width: '100%' }}>
-      {/* Navigation Router */}
+    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
       {!selectedProject ? (
         <Dashboard 
           onSelectProject={(proj) => setSelectedProject(proj)} 
@@ -102,32 +98,32 @@ export default function App() {
         />
       )}
 
-      {/* CREATE MODAL */}
       {showCreateModal && (
         <div style={modalOverlay}>
           <div style={modalContent}>
             <div style={modalHeader}>
-              <h2 style={{margin:0, fontSize:'20px'}}>New Project Intake</h2>
+              <h2 style={{margin:0, fontSize:'18px'}}>Create New Project</h2>
               <button onClick={() => setShowCreateModal(false)} style={closeBtn}><X /></button>
             </div>
 
             <form onSubmit={handleCreateProject} style={formBody}>
               {/* SECTION: CLIENT */}
-              <div style={sectionLabel}><User size={14}/> Client Information</div>
+              <div style={sectionLabel}><User size={14}/> Client Info</div>
               <div style={grid2}>
                 <input required placeholder="Project Name" style={input} onChange={e => setForm({...form, projectName: e.target.value})} />
-                <input required placeholder="Customer Full Name" style={input} onChange={e => setForm({...form, customerName: e.target.value})} />
-                <input required type="email" placeholder="Customer Email" style={input} onChange={e => setForm({...form, customerEmail: e.target.value})} />
-                <input required type="tel" placeholder="Contact Number" style={input} onChange={e => setForm({...form, customerPhone: e.target.value})} />
+                <input required placeholder="Customer Name" style={input} onChange={e => setForm({...form, customerName: e.target.value})} />
+                <input required type="email" placeholder="Email Address" style={input} onChange={e => setForm({...form, customerEmail: e.target.value})} />
+                <input required type="tel" placeholder="Phone Number" style={input} onChange={e => setForm({...form, customerPhone: e.target.value})} />
               </div>
 
               {/* SECTION: BILLING */}
-              <div style={sectionLabel}><Globe size={14}/> Billing Address</div>
-              <input required placeholder="Full Billing Address" style={input} onChange={e => setForm({...form, billingAddress: e.target.value})} />
+              <div style={sectionLabel}><Globe size={14}/> Billing Details</div>
+              <input required placeholder="Billing Address" style={input} onChange={e => setForm({...form, billingAddress: e.target.value})} />
               <div style={grid2}>
-                <input required placeholder="Billing City" style={input} onChange={e => setForm({...form, billingCity: e.target.value})} />
-                <select required style={input} onChange={e => setForm({...form, billingState: e.target.value})}>
-                  <option value="">Select State</option>
+                <select style={input} value={form.billingCity} onChange={e => setForm({...form, billingCity: e.target.value})}>
+                  {POPULAR_CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select style={input} value={form.billingState} onChange={e => setForm({...form, billingState: e.target.value})}>
                   {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <input required placeholder="Pincode" style={input} onChange={e => setForm({...form, billingPincode: e.target.value})} />
@@ -139,19 +135,20 @@ export default function App() {
               {/* SECTION: PROJECT SITE */}
               <div style={sectionLabel}><MapPin size={14}/> Project Site Details</div>
               <div style={grid2}>
-                <input required placeholder="Project City (Required for ID)" style={input} onChange={e => setForm({...form, projectCity: e.target.value})} />
-                <select required style={input} onChange={e => setForm({...form, projectState: e.target.value})}>
-                  <option value="">Select State</option>
+                <select style={input} value={form.projectCity} onChange={e => setForm({...form, projectCity: e.target.value})}>
+                  {POPULAR_CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select style={input} value={form.projectState} onChange={e => setForm({...form, projectState: e.target.value})}>
                   {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <input required placeholder="Project Pincode" style={input} onChange={e => setForm({...form, projectPincode: e.target.value})} />
+                <input required placeholder="Site Pincode" style={input} onChange={e => setForm({...form, projectPincode: e.target.value})} />
                 <select style={input} value={form.projectCountry} onChange={e => setForm({...form, projectCountry: e.target.value})}>
                   {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
 
               <button type="submit" style={submitBtn} disabled={loading}>
-                {loading ? <Loader2 className="animate-spin" size={20}/> : "Create Project & Open"}
+                {loading ? <Loader2 className="animate-spin" size={20}/> : "Save Project"}
               </button>
             </form>
           </div>
@@ -162,12 +159,12 @@ export default function App() {
 }
 
 // --- STYLES ---
-const modalOverlay = { position: 'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(15, 23, 42, 0.7)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:2000, backdropFilter: 'blur(4px)' };
-const modalContent = { background:'#fff', width:'600px', maxHeight:'90vh', borderRadius:'24px', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)' };
-const modalHeader = { padding:'25px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' };
-const formBody = { padding:'25px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'15px' };
-const sectionLabel = { fontSize:'11px', fontWeight:'800', color:'#64748b', textTransform:'uppercase', letterSpacing:'1px', display:'flex', alignItems:'center', gap:'8px', marginTop:'10px' };
-const grid2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' };
-const input = { padding:'12px', borderRadius:'10px', border:'1px solid #e2e8f0', fontSize:'14px', outline:'none', background:'#f8fafc' };
-const submitBtn = { padding:'16px', background:'#1e293b', color:'#fff', border:'none', borderRadius:'12px', fontWeight:'bold', cursor:'pointer', marginTop:'20px', display:'flex', justifyContent:'center' };
-const closeBtn = { background:'none', border:'none', cursor:'pointer', color:'#94a3b8' };
+const modalOverlay = { position: 'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(15, 23, 42, 0.7)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:2000 };
+const modalContent = { background:'#fff', width:'550px', maxHeight:'85vh', borderRadius:'20px', display:'flex', flexDirection:'column', overflow:'hidden' };
+const modalHeader = { padding:'20px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' };
+const formBody = { padding:'20px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'12px' };
+const sectionLabel = { fontSize:'10px', fontWeight:'800', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'1px', marginTop:'10px', display:'flex', alignItems:'center', gap:'5px' };
+const grid2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' };
+const input = { padding:'10px', borderRadius:'8px', border:'1px solid #e2e8f0', fontSize:'13px', outline:'none' };
+const submitBtn = { padding:'14px', background:'#1e293b', color:'#fff', border:'none', borderRadius:'10px', fontWeight:'bold', cursor:'pointer', marginTop:'15px', display:'flex', justifyContent:'center' };
+const closeBtn = { background:'none', border:'none', cursor:'pointer' };
