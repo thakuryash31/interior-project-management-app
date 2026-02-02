@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { supabase } from './supabase';
-import { X, MapPin, User, Globe, Phone, Mail } from 'lucide-react';
+import Dashboard from './Dashboard'; // Ensure these paths are correct
+import ProjectDetails from './ProjectDetails';
+import { X, MapPin, User, Globe, Phone, Mail, Loader2 } from 'lucide-react';
 
 // Simplified lists for the dropdowns
 const INDIAN_STATES = ["Maharashtra", "Karnataka", "Tamil Nadu", "Delhi", "Gujarat", "West Bengal", "Others"];
