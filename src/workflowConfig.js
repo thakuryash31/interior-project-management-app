@@ -1,22 +1,22 @@
 export const PROJECT_STAGES = [
-  {
-    id: 'initial',
-    name: 'Initial Design Stage',
-    subStages: ['Site Measurement', 'Concept Moodboard', 'Space Planning', 'Initial Estimate']
+  { 
+    id: 'initial', 
+    name: 'Initial Design', 
+    subStages: ['Site Measurement', 'Floor Plan', 'Requirement Gathering', 'Quotation'] 
   },
-  {
-    id: 'detail',
-    name: 'Detail Design Stage',
-    subStages: ['3D Visualizations', 'Material Selection', 'Electrical & Plumbing Layouts', 'False Ceiling Designs']
+  { 
+    id: 'details', 
+    name: 'Details Design', 
+    subStages: ['3D Rendering', 'Electrical Layout', 'Material Selection', 'Working Drawings'] 
   },
-  {
-    id: 'production',
-    name: 'Production Stage',
-    subStages: ['Factory BOQ', 'Carpentry Work', 'Civil Work', 'Vendor Ordering']
+  { 
+    id: 'production', 
+    name: 'Production', 
+    subStages: ['Factory Order', 'Quality Check', 'Dispatch'] 
   },
-  {
-    id: 'handover',
-    name: 'Installation & Handover',
-    subStages: ['On-site Assembly', 'Quality Check', 'Deep Cleaning', 'Final Handover']
+  { 
+    id: 'handover', 
+    name: 'Installation & Handover', 
+    subStages: ['On-site Assembly', 'Snag List', 'Final Handover'] 
   }
 ];

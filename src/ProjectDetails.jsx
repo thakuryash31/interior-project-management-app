@@ -1,25 +1,13 @@
 import React, { useState } from 'react';
 import { supabase } from './supabase';
 import { PROJECT_STAGES } from './workflowConfig';
-import { 
-  ArrowLeft, Upload, ChevronRight, Loader2, 
-  FileText, CheckCircle2, Plus, X, Search 
-} from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ChevronRight, Loader2, Circle } from 'lucide-react';
 
 export default function ProjectDetails({ project, onBack }) {
-  // --- ADDED THIS LINE TO FIX THE ERROR ---
   const [activeStageIndex, setActiveStageIndex] = useState(project.current_stage_index || 0);
-  
   const [updating, setUpdating] = useState(false);
-  const [uploading, setUploading] = useState(null);
-  const [reqSearch, setReqSearch] = useState("");
+  const currentStage = PROJECT_STAGES[activeStageIndex];
 
-  const requirementsList = [
-    "Modular furniture", "Movable Furniture", "False Ceiling", 
-    "Flooring", "Electrical Work", "Plumbing work"
-  ];
-
-  // --- DATABASE UPDATE LOGIC ---
   const updateProjectField = async (updatedData) => {
     setUpdating(true);
     try {
@@ -29,176 +17,95 @@ export default function ProjectDetails({ project, onBack }) {
         .eq('id', project.id);
       
       if (error) throw error;
+      alert("✅ Progress Saved!"); // Success Message
     } catch (err) {
       console.error("Update Error:", err.message);
+      alert("❌ Save Failed: " + err.message);
     } finally {
       setUpdating(false);
     }
   };
 
-  // --- FILE UPLOAD LOGIC ---
-  const handleFileUpload = async (e, fieldName) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setUploading(fieldName);
-    const fileExt = file.name.split('.').pop();
-    const filePath = `${project.project_id}/${fieldName}_${Date.now()}.${fileExt}`;
-
-    try {
-      const { data, error } = await supabase.storage
-        .from('project-files')
-        .upload(filePath, file);
-
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('project-files')
-        .getPublicUrl(filePath);
-
-      await updateProjectField({ [fieldName]: publicUrl });
-    } catch (err) {
-      alert("Upload failed: " + err.message);
-    } finally {
-      setUploading(null);
-    }
+  const toggleSubStage = (subStageName) => {
+    const current = project.completed_sub_stages || [];
+    const updated = current.includes(subStageName)
+      ? current.filter(s => s !== subStageName)
+      : [...current, subStageName];
+    
+    updateProjectField({ completed_sub_stages: updated });
   };
 
-  const toggleRequirement = (req) => {
-    const current = project.selected_requirements || [];
-    const updated = current.includes(req) 
-      ? current.filter(r => r !== req) 
-      : [...current, req];
-    
-    updateProjectField({ selected_requirements: updated });
+  const handleNextStage = () => {
+    if (activeStageIndex < PROJECT_STAGES.length - 1) {
+      const nextIndex = activeStageIndex + 1;
+      updateProjectField({ current_stage_index: nextIndex });
+      setActiveStageIndex(nextIndex);
+    } else {
+      alert("Project is already in the final stage!");
+    }
   };
 
   return (
     <div style={containerStyle}>
-      <div style={headerStyle}>
-        <button onClick={onBack} style={backBtn}><ArrowLeft size={18} /> Back to Dashboard</button>
-        <div style={statusBadge}>Phase {activeStageIndex + 1}: {PROJECT_STAGES[activeStageIndex].name}</div>
+      <button onClick={onBack} style={backBtn}><ArrowLeft size={18} /> Dashboard</button>
+
+      {/* 4-Stage Progress Stepper */}
+      <div style={stepperContainer}>
+        {PROJECT_STAGES.map((stage, index) => (
+          <div key={stage.id} style={stepItem(index <= activeStageIndex)}>
+            <div style={stepCircle(index <= activeStageIndex)}>
+              {index < activeStageIndex ? <CheckCircle2 size={16}/> : index + 1}
+            </div>
+            <span style={stepLabel}>{stage.name}</span>
+          </div>
+        ))}
       </div>
 
-      <div style={mainGrid}>
-        <div style={cardStyle}>
-          <h2 style={{margin: '0 0 20px 0'}}>{project.project_name}</h2>
+      <div style={cardStyle}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+          <h2>{currentStage.name}</h2>
+          {updating && <Loader2 className="spin" size={20} color="#2563eb" />}
+        </div>
+        <p style={subtitle}>Complete the sub-stages below to move forward.</p>
 
-          {/* 1. Floor Plan Section */}
-          <div style={sectionBox}>
-            <div style={sectionHeader}>
-              <h4>1. Floor Plan & Measurements</h4>
-              <label style={uploadBtn(uploading === 'floor_plan_url')}>
-                {uploading === 'floor_plan_url' ? <Loader2 className="spin" size={16} /> : <Upload size={16} />}
-                Upload Plan
-                <input type="file" hidden onChange={(e) => handleFileUpload(e, 'floor_plan_url')} />
-              </label>
+        {/* Sub-Stages Checklist */}
+        <div style={checklistGrid}>
+          {currentStage.subStages.map((sub) => (
+            <div 
+              key={sub} 
+              onClick={() => toggleSubStage(sub)}
+              style={checkItem(project.completed_sub_stages?.includes(sub))}
+            >
+              {project.completed_sub_stages?.includes(sub) ? 
+                <CheckCircle2 size={20} color="#2563eb" /> : 
+                <Circle size={20} color="#cbd5e1" />
+              }
+              <span>{sub}</span>
             </div>
-            {project.floor_plan_url && (
-              <a href={project.floor_plan_url} target="_blank" rel="noreferrer" style={fileLink}>
-                <FileText size={16} /> View Uploaded Floor Plan
-              </a>
-            )}
-          </div>
-
-          {/* 2. Requirements Section */}
-          <div style={sectionBox}>
-            <h4>2. Customer Requirements</h4>
-            <textarea 
-              style={textArea} 
-              placeholder="Add specific customer notes..."
-              defaultValue={project.customer_notes}
-              onBlur={(e) => updateProjectField({ customer_notes: e.target.value })}
-            />
-            <div style={tagCloud}>
-              {requirementsList.map(req => (
-                <button 
-                  key={req} 
-                  onClick={() => toggleRequirement(req)}
-                  style={project.selected_requirements?.includes(req) ? activeTag : inactiveTag}
-                >
-                  {req} {project.selected_requirements?.includes(req) ? <X size={12}/> : <Plus size={12}/>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 3. Finance Section */}
-          <div style={sectionBox}>
-            <h4>3. Quotation & Payments</h4>
-            <div style={financeGrid}>
-              <div>
-                <label style={miniLabel}>Total Quote (₹)</label>
-                <input 
-                  type="number" 
-                  style={input} 
-                  defaultValue={project.total_quote}
-                  onBlur={(e) => updateProjectField({ total_quote: Number(e.target.value) })}
-                />
-              </div>
-              <div>
-                <label style={miniLabel}>Paid Amount (₹)</label>
-                <input 
-                  type="number" 
-                  style={input} 
-                  defaultValue={project.initial_paid}
-                  onBlur={(e) => updateProjectField({ initial_paid: Number(e.target.value) })}
-                />
-              </div>
-              <div style={balanceBox}>
-                <label style={miniLabel}>Balance Due</label>
-                <div style={balanceText}>₹ {(project.total_quote || 0) - (project.initial_paid || 0)}</div>
-              </div>
-            </div>
-          </div>
-
-          <button 
-            style={promoteBtn}
-            onClick={() => {
-                const nextIndex = (project.current_stage_index || 0) + 1;
-                updateProjectField({ current_stage_index: nextIndex });
-                setActiveStageIndex(nextIndex);
-            }}
-          >
-            Move to Next Stage <ChevronRight size={18} />
-          </button>
+          ))}
         </div>
 
-        {/* Sidebar Info */}
-        <div style={sidebar}>
-           <div style={cardStyle}>
-              <h4 style={miniLabel}>Project Location</h4>
-              <p style={{margin: '5px 0 0 0', fontWeight: 'bold'}}>{project.project_city}</p>
-              <hr style={hr} />
-              <h4 style={miniLabel}>Client Name</h4>
-              <p style={{margin: '5px 0 0 0', fontWeight: 'bold'}}>{project.customer_name}</p>
-           </div>
-        </div>
+        <button 
+          style={primaryBtn} 
+          onClick={handleNextStage}
+          disabled={updating}
+        >
+          Move to Next Stage <ChevronRight size={18} />
+        </button>
       </div>
     </div>
   );
 }
 
-// --- STYLES (Keep existing) ---
-const containerStyle = { padding: '30px 5%', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' };
-const headerStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '30px' };
-const backBtn = { border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' };
-const statusBadge = { background: '#dbeafe', color: '#1e40af', padding: '6px 15px', borderRadius: '20px', fontSize: '13px', fontWeight: 'bold' };
-const mainGrid = { display: 'grid', gridTemplateColumns: '1fr 300px', gap: '30px' };
-const cardStyle = { background: '#fff', padding: '30px', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' };
-const sectionBox = { marginBottom: '25px', padding: '20px', border: '1px solid #f1f5f9', borderRadius: '15px' };
-const sectionHeader = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' };
-const uploadBtn = (load) => ({ background: load ? '#94a3b8' : '#2563eb', color: '#fff', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' });
-const fileLink = { color: '#2563eb', textDecoration: 'none', fontSize: '14px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '8px' };
-const textArea = { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', minHeight: '80px', marginTop: '10px' };
-const tagCloud = { display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '15px' };
-const inactiveTag = { padding: '6px 14px', borderRadius: '20px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' };
-const activeTag = { ...inactiveTag, background: '#2563eb', color: '#fff', border: '#2563eb' };
-const financeGrid = { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginTop: '15px' };
-const input = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' };
-const miniLabel = { fontSize: '11px', color: '#94a3b8', fontWeight: 'bold', textTransform: 'uppercase' };
-const balanceBox = { background: '#fef2f2', padding: '10px', borderRadius: '8px', border: '1px solid #fee2e2' };
-const balanceText = { color: '#b91c1c', fontWeight: 'bold', fontSize: '16px' };
-const promoteBtn = { width: '100%', padding: '16px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' };
-const sidebar = { display: 'flex', flexDirection: 'column', gap: '20px' };
-const hr = { border: '0', borderTop: '1px solid #f1f5f9', margin: '15px 0' };
+// --- STYLES ---
+const containerStyle = { padding: '40px 10%', background: '#f8fafc', minHeight: '100vh' };
+const backBtn = { border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' };
+const stepperContainer = { display: 'flex', justifyContent: 'space-between', marginBottom: '40px', position: 'relative' };
+const stepItem = (active) => ({ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: active ? 1 : 0.3 });
+const stepCircle = (active) => ({ width: '32px', height: '32px', borderRadius: '50%', background: active ? '#2563eb' : '#cbd5e1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', marginBottom: '8px' });
+const stepLabel = { fontSize: '12px', fontWeight: 'bold', color: '#1e293b', textAlign: 'center' };
+const cardStyle = { background: '#fff', padding: '40px', borderRadius: '24px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' };
+const subtitle = { color: '#64748b', fontSize: '14px', marginBottom: '30px' };
+const checklistGrid = { display: 'grid', gap: '12px', marginBottom: '40px' };
+const checkItem = (done) => ({ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', borderRadius: '12px', border: `1px solid ${done ? '#2563eb' : '#e2e8f0'}`, background: done ? '#eff6ff' : '#fff', cursor: 'pointer', transition: '0.2s', fontWeight: done ? '600' : '400' });
+const primaryBtn = { width: '100%', padding: '18px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '15px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' };
