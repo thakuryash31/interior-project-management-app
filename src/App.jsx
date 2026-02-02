@@ -1,94 +1,131 @@
-import React, { useState, useEffect } from 'react';
-import { auth } from './firebase';
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import React, { useState } from 'react';
 import Dashboard from './Dashboard';
-import CreateProject from './CreateProject';
-import LandingPage from './LandingPage';
-import { Layers, LogOut, LayoutGrid, PlusSquare } from 'lucide-react';
+import ProjectDetails from './ProjectDetails';
+import { supabase } from './supabase';
+import { Plus, X } from 'lucide-react';
 
-function App() {
-  const [user, setUser] = useState(null);
-  const [tab, setTab] = useState('dashboard');
+export default function App() {
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newProject, setNewProject] = useState({
+    projectName: '',
+    projectId: Math.floor(1000000000 + Math.random() * 9000000000).toString(),
+    projectCity: '',
+    customerName: ''
+  });
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
-    return () => unsubscribe();
-  }, []);
+  // --- LOGIC: Save New Project to Supabase ---
+  const handleCreateProject = async (e) => {
+    e.preventDefault();
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert([{
+          project_name: newProject.projectName,
+          project_id: newProject.projectId,
+          project_city: newProject.projectCity,
+          customer_name: newProject.customerName,
+          current_stage_index: 0
+        }])
+        .select();
 
-  if (!user) return <LandingPage />;
+      if (error) throw error;
+
+      // Close modal and refresh (Dashboard will re-fetch via its useEffect)
+      setShowCreateModal(false);
+      setNewProject({
+        projectName: '',
+        projectId: Math.floor(1000000000 + Math.random() * 9000000000).toString(),
+        projectCity: '',
+        customerName: ''
+      });
+      
+      // Optional: Automatically open the newly created project
+      if (data) setSelectedProject(data[0]);
+    } catch (err) {
+      alert("Error creating project: " + err.message);
+    }
+  };
 
   return (
-    <div className="App" style={{ fontFamily: "'Inter', sans-serif" }}>
-      {/* --- SaaS HEADER --- */}
-      <nav style={navStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '30px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800', fontSize: '18px', color: '#2563eb' }}>
-            <Layers size={24} /> InteriorPM
-          </div>
-          
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={() => setTab('dashboard')} style={tab === 'dashboard' ? activeTab : inactiveTab}>
-              <LayoutGrid size={18} /> Dashboard
-            </button>
-            <button onClick={() => setTab('create')} style={tab === 'create' ? activeTab : inactiveTab}>
-              <PlusSquare size={18} /> New Project
-            </button>
+    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
+      {/* Navigation Logic */}
+      {!selectedProject ? (
+        <Dashboard 
+          onSelectProject={(proj) => setSelectedProject(proj)} 
+          onCreateNew={() => setShowCreateModal(true)} 
+        />
+      ) : (
+        <ProjectDetails 
+          project={selectedProject} 
+          onBack={() => setSelectedProject(null)} 
+        />
+      )}
+
+      {/* Create Project Modal */}
+      {showCreateModal && (
+        <div style={modalOverlay}>
+          <div style={modalContent}>
+            <div style={modalHeader}>
+              <h3>Create New Project</h3>
+              <button onClick={() => setShowCreateModal(false)} style={closeBtn}><X size={20}/></button>
+            </div>
+            
+            <form onSubmit={handleCreateProject} style={formStyle}>
+              <div style={inputGroup}>
+                <label style={label}>Project Name</label>
+                <input 
+                  required
+                  style={input} 
+                  placeholder="e.g. Sharma Residence" 
+                  value={newProject.projectName}
+                  onChange={(e) => setNewProject({...newProject, projectName: e.target.value})}
+                />
+              </div>
+
+              <div style={inputGroup}>
+                <label style={label}>Project City</label>
+                <input 
+                  required
+                  style={input} 
+                  placeholder="e.g. Mumbai" 
+                  value={newProject.projectCity}
+                  onChange={(e) => setNewProject({...newProject, projectCity: e.target.value})}
+                />
+              </div>
+
+              <div style={inputGroup}>
+                <label style={label}>Customer Name</label>
+                <input 
+                  required
+                  style={input} 
+                  placeholder="Full Name" 
+                  value={newProject.customerName}
+                  onChange={(e) => setNewProject({...newProject, customerName: e.target.value})}
+                />
+              </div>
+
+              <div style={idInfo}>
+                Project ID will be generated: <strong>{newProject.projectId}</strong>
+              </div>
+
+              <button type="submit" style={submitBtn}>Create Project</button>
+            </form>
           </div>
         </div>
-
-        <button onClick={() => signOut(auth)} style={logoutBtn}>
-          <LogOut size={16} /> Logout
-        </button>
-      </nav>
-
-      {tab === 'dashboard' ? <Dashboard /> : <CreateProject />}
+      )}
     </div>
   );
 }
 
-// --- Nav Styles ---
-const navStyle = {
-  padding: '12px 5%',
-  background: '#1e293b', // Deep Navy Sidebar/Header feel
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  position: 'sticky',
-  top: 0,
-  zIndex: 100
-};
-
-const inactiveTab = {
-  background: 'none',
-  border: 'none',
-  padding: '8px 16px',
-  cursor: 'pointer',
-  color: '#94a3b8',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  fontWeight: '600',
-  fontSize: '14px',
-  borderRadius: '8px'
-};
-
-const activeTab = {
-  ...inactiveTab,
-  color: '#fff',
-  backgroundColor: '#334155'
-};
-
-const logoutBtn = {
-  background: 'none',
-  border: '1px solid #334155',
-  color: '#94a3b8',
-  padding: '8px 16px',
-  borderRadius: '8px',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  fontSize: '13px'
-};
-
-export default App;
+// --- STYLES ---
+const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
+const modalContent = { background: '#fff', padding: '30px', borderRadius: '20px', width: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' };
+const modalHeader = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' };
+const closeBtn = { background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' };
+const formStyle = { display: 'flex', flexDirection: 'column', gap: '15px' };
+const inputGroup = { display: 'flex', flexDirection: 'column', gap: '5px' };
+const label = { fontSize: '12px', fontWeight: 'bold', color: '#64748b' };
+const input = { padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none' };
+const idInfo = { fontSize: '11px', color: '#94a3b8', background: '#f8fafc', padding: '10px', borderRadius: '8px', textAlign: 'center' };
+const submitBtn = { background: '#2563eb', color: '#fff', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' };
