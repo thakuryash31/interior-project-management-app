@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 
 export default function ProjectDetails({ project, onBack }) {
+  // --- ADDED THIS LINE TO FIX THE ERROR ---
+  const [activeStageIndex, setActiveStageIndex] = useState(project.current_stage_index || 0);
+  
   const [updating, setUpdating] = useState(false);
   const [uploading, setUploading] = useState(null);
   const [reqSearch, setReqSearch] = useState("");
@@ -20,7 +23,6 @@ export default function ProjectDetails({ project, onBack }) {
   const updateProjectField = async (updatedData) => {
     setUpdating(true);
     try {
-      // IMPORTANT: We use project.id (the UUID) to find the right row
       const { error } = await supabase
         .from('projects')
         .update(updatedData)
@@ -29,7 +31,6 @@ export default function ProjectDetails({ project, onBack }) {
       if (error) throw error;
     } catch (err) {
       console.error("Update Error:", err.message);
-      alert("Error: " + err.message);
     } finally {
       setUpdating(false);
     }
@@ -41,7 +42,6 @@ export default function ProjectDetails({ project, onBack }) {
     if (!file) return;
 
     setUploading(fieldName);
-    // Create a unique path: folder/filename
     const fileExt = file.name.split('.').pop();
     const filePath = `${project.project_id}/${fieldName}_${Date.now()}.${fileExt}`;
 
@@ -64,7 +64,6 @@ export default function ProjectDetails({ project, onBack }) {
     }
   };
 
-  // --- REQUIREMENTS LOGIC ---
   const toggleRequirement = (req) => {
     const current = project.selected_requirements || [];
     const updated = current.includes(req) 
@@ -155,9 +154,13 @@ export default function ProjectDetails({ project, onBack }) {
 
           <button 
             style={promoteBtn}
-            onClick={() => updateProjectField({ current_stage_index: 1 })}
+            onClick={() => {
+                const nextIndex = (project.current_stage_index || 0) + 1;
+                updateProjectField({ current_stage_index: nextIndex });
+                setActiveStageIndex(nextIndex);
+            }}
           >
-            Move to Detail Design Stage <ChevronRight size={18} />
+            Move to Next Stage <ChevronRight size={18} />
           </button>
         </div>
 
@@ -176,7 +179,7 @@ export default function ProjectDetails({ project, onBack }) {
   );
 }
 
-// --- STYLES ---
+// --- STYLES (Keep existing) ---
 const containerStyle = { padding: '30px 5%', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' };
 const headerStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '30px' };
 const backBtn = { border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' };
