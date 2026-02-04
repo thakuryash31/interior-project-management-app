@@ -1,194 +1,159 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { 
-  Loader2, Mail, Phone, Lock, Eye, EyeOff, User, AlertCircle 
-} from 'lucide-react';
+import Dashboard from './Dashboard';
+import ProjectDetails from './ProjectDetails';
+import { X, MapPin, User, Globe, Loader2, HardDrive } from 'lucide-react';
 
-export default function Auth() {
-  const [isSignUp, setIsSignUp] = useState(false);
+// --- CONSTANTS ---
+const INDIAN_STATES = ["Maharashtra", "Karnataka", "Delhi", "Gujarat", "Tamil Nadu", "Telangana", "West Bengal", "Other"];
+const COUNTRIES = ["India", "UAE", "USA", "UK", "Singapore"];
+const POPULAR_CITIES = ["Mumbai", "Bengaluru", "Delhi", "Hyderabad", "Ahmedabad", "Chennai", "Kolkata", "Pune", "Surat", "Jaipur", "Lucknow", "Other"];
+
+export default function App() {
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState({});
-  
+
+  // Form State
   const [form, setForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    mobile: '',
-    password: '',
-    confirmPassword: ''
+    projectName: '', customerName: '', customerEmail: '', customerPhone: '',
+    billingAddress: '', billingCity: 'Mumbai', billingState: 'Maharashtra', billingPincode: '', billingCountry: 'India',
+    projectCity: 'Mumbai', projectState: 'Maharashtra', projectPincode: '', projectCountry: 'India'
   });
 
-  // --- Client-Side Validation ---
-  const validate = () => {
-    let newErrors = {};
-    if (!/\S+@\S+\.\S+/.test(form.email)) newErrors.email = "Invalid email address";
-    
-    if (isSignUp) {
-      if (form.firstName.trim().length < 2) newErrors.firstName = "First name required";
-      if (!/^[6-9]\d{9}$/.test(form.mobile)) newErrors.mobile = "Invalid 10-digit mobile";
-      if (form.password.length < 6) newErrors.password = "Min 6 characters required";
-      if (form.password !== form.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleAuth = async (e) => {
+  // --- LOGIC: Create Project with Sequential ID ---
+  const handleCreateProject = async (e) => {
     e.preventDefault();
-    if (!validate()) return;
-    
     setLoading(true);
+
     try {
-      if (isSignUp) {
-        // 1. Create the Auth User
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: form.email,
-          password: form.password,
-        });
+      const prefix = (form.projectCity || "PRJ").substring(0, 3).toUpperCase();
+      
+      // Get the last ID to increment
+      const { data: lastProjects } = await supabase
+        .from('projects')
+        .select('project_id')
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-        if (authError) throw authError;
-
-        // 2. Immediate Profile Creation
-        // Note: This relies on "Confirm Email" being OFF in Supabase settings
-        if (authData?.user) {
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([{
-              id: authData.user.id, 
-              first_name: form.firstName,
-              last_name: form.lastName,
-              mobile_number: form.mobile,
-              email: form.email
-            }]);
-          
-          if (profileError) throw profileError;
-          alert("Account created successfully!");
+      let nextNum = 1000000001;
+      if (lastProjects && lastProjects.length > 0) {
+        const lastFullId = lastProjects[0].project_id;
+        if (lastFullId.includes('-')) {
+          nextNum = parseInt(lastFullId.split('-')[1]) + 1;
         }
-      } else {
-        // Login Logic
-        const { error: loginError } = await supabase.auth.signInWithPassword({
-          email: form.email,
-          password: form.password
-        });
-        if (loginError) throw loginError;
       }
+      const customId = `${prefix}-${nextNum}`;
+
+      const { data, error } = await supabase.from('projects').insert([{
+        project_id: customId,
+        project_name: form.projectName,
+        customer_name: form.customerName,
+        customer_email: form.customerEmail,
+        customer_phone: form.customerPhone,
+        billing_address: form.billingAddress,
+        billing_city: form.billingCity,
+        billing_state: form.billingState,
+        billing_pincode: form.billingPincode,
+        billing_country: form.billingCountry,
+        project_city: form.projectCity,
+        project_state: form.projectState,
+        project_pincode: form.projectPincode,
+        project_country: form.projectCountry,
+        current_sub_step: 1
+        // Removed user_id requirement for now
+      }]).select();
+
+      if (error) throw error;
+      setShowCreateModal(false);
+      if (data) setSelectedProject(data[0]);
     } catch (err) {
-      // Catch RLS or Rate Limit errors
-      alert(err.message);
+      alert("Error: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={authWrapper}>
-      <div style={authCard}>
-        <div style={header}>
-          <h2 style={title}>{isSignUp ? "Create Account" : "Welcome Back"}</h2>
-          <p style={subtitle}>{isSignUp ? "Register your design firm" : "Login to your project hub"}</p>
-        </div>
+    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
+      {/* HEADER BAR */}
+      <nav style={navStyle}>
+        <div style={{fontWeight:'900', fontSize:'20px', color:'#1e293b'}}>ProjectFlow <span style={devTag}>DEV MODE</span></div>
+      </nav>
 
-        <form onSubmit={handleAuth} style={formBox}>
-          {isSignUp && (
-            <div style={row}>
-              <div style={inputGroup}>
-                <label style={label}>First Name</label>
-                <input 
-                  style={input(errors.firstName)} 
-                  placeholder="John"
-                  onChange={e => setForm({...form, firstName: e.target.value})} 
-                />
-              </div>
-              <div style={inputGroup}>
-                <label style={label}>Last Name</label>
-                <input 
-                  style={input(errors.lastName)} 
-                  placeholder="Doe"
-                  onChange={e => setForm({...form, lastName: e.target.value})} 
-                />
-              </div>
+      {!selectedProject ? (
+        <Dashboard 
+          onSelectProject={(proj) => setSelectedProject(proj)} 
+          onCreateNew={() => setShowCreateModal(true)} 
+        />
+      ) : (
+        <ProjectDetails 
+          project={selectedProject} 
+          onBack={() => setSelectedProject(null)} 
+        />
+      )}
+
+      {/* CREATE PROJECT MODAL */}
+      {showCreateModal && (
+        <div style={modalOverlay}>
+          <div style={modalContent}>
+            <div style={modalHeader}>
+              <h2 style={{margin:0, fontSize:'18px'}}>Create New Project</h2>
+              <button onClick={() => setShowCreateModal(false)} style={closeBtn}><X /></button>
             </div>
-          )}
 
-          <div style={inputGroup}>
-            <label style={label}>Email Address</label>
-            <input 
-              type="email" 
-              style={input(errors.email)} 
-              placeholder="name@company.com"
-              onChange={e => setForm({...form, email: e.target.value})} 
-            />
-            {errors.email && <span style={errText}>{errors.email}</span>}
-          </div>
+            <form onSubmit={handleCreateProject} style={formBody}>
+              <div style={sectionLabel}><User size={14}/> Client Information</div>
+              <div style={grid2}>
+                <input required placeholder="Project Name" style={input} onChange={e => setForm({...form, projectName: e.target.value})} />
+                <input required placeholder="Customer Name" style={input} onChange={e => setForm({...form, customerName: e.target.value})} />
+                <input required type="email" placeholder="Email Address" style={input} onChange={e => setForm({...form, customerEmail: e.target.value})} />
+                <input required type="tel" placeholder="Phone Number" style={input} onChange={e => setForm({...form, customerPhone: e.target.value})} />
+              </div>
 
-          {isSignUp && (
-            <div style={inputGroup}>
-              <label style={label}>Mobile Number</label>
-              <input 
-                type="tel" 
-                style={input(errors.mobile)} 
-                placeholder="9876543210"
-                onChange={e => setForm({...form, mobile: e.target.value})} 
-              />
-              {errors.mobile && <span style={errText}>{errors.mobile}</span>}
-            </div>
-          )}
+              <div style={sectionLabel}><Globe size={14}/> Billing Address</div>
+              <input required placeholder="Address Line" style={input} onChange={e => setForm({...form, billingAddress: e.target.value})} />
+              <div style={grid2}>
+                <select style={input} value={form.billingCity} onChange={e => setForm({...form, billingCity: e.target.value})}>
+                  {POPULAR_CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select style={input} value={form.billingState} onChange={e => setForm({...form, billingState: e.target.value})}>
+                  {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <input required placeholder="Pincode" style={input} onChange={e => setForm({...form, billingPincode: e.target.value})} />
+              </div>
 
-          <div style={inputGroup}>
-            <label style={label}>Password</label>
-            <div style={{position:'relative'}}>
-              <input 
-                type={showPassword ? "text" : "password"} 
-                style={input(errors.password)} 
-                placeholder="••••••••"
-                onChange={e => setForm({...form, password: e.target.value})} 
-              />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} style={eyeBtn}>
-                {showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
+              <div style={sectionLabel}><MapPin size={14}/> Project Site Address</div>
+              <div style={grid2}>
+                <select style={input} value={form.projectCity} onChange={e => setForm({...form, projectCity: e.target.value})}>
+                  {POPULAR_CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select style={input} value={form.projectState} onChange={e => setForm({...form, projectState: e.target.value})}>
+                  {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <input required placeholder="Site Pincode" style={input} onChange={e => setForm({...form, projectPincode: e.target.value})} />
+              </div>
+
+              <button type="submit" style={submitBtn} disabled={loading}>
+                {loading ? <Loader2 className="animate-spin" size={20}/> : "Initialize Project"}
               </button>
-            </div>
-            {errors.password && <span style={errText}>{errors.password}</span>}
+            </form>
           </div>
-
-          {isSignUp && (
-            <div style={inputGroup}>
-              <label style={label}>Confirm Password</label>
-              <input 
-                type={showPassword ? "text" : "password"} 
-                style={input(errors.confirmPassword)} 
-                placeholder="••••••••"
-                onChange={e => setForm({...form, confirmPassword: e.target.value})} 
-              />
-              {errors.confirmPassword && <span style={errText}>{errors.confirmPassword}</span>}
-            </div>
-          )}
-
-          <button type="submit" style={submitBtn} disabled={loading}>
-            {loading ? <Loader2 className="animate-spin" size={20}/> : (isSignUp ? "Sign Up" : "Sign In")}
-          </button>
-        </form>
-
-        <button onClick={() => {setIsSignUp(!isSignUp); setErrors({});}} style={toggleBtn}>
-          {isSignUp ? "Already have an account? Login" : "Don't have an account? Sign Up"}
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // --- STYLES ---
-const authWrapper = { display: 'flex', justifyContent: 'center', padding: '50px 20px' };
-const authCard = { background: '#fff', padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9' };
-const header = { textAlign: 'center', marginBottom: '30px' };
-const title = { margin: '0 0 8px 0', fontSize: '24px', fontWeight: '800', color: '#1e293b' };
-const subtitle = { color: '#64748b', fontSize: '14px' };
-const formBox = { display: 'flex', flexDirection: 'column', gap: '18px' };
-const row = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' };
-const inputGroup = { display: 'flex', flexDirection: 'column', gap: '6px' };
-const label = { fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase' };
-const input = (err) => ({ padding: '12px', borderRadius: '10px', border: err ? '1px solid #ef4444' : '1px solid #e2e8f0', background: '#f8fafc', outline: 'none', fontSize: '14px', width: '100%' });
-const eyeBtn = { position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' };
-const submitBtn = { background: '#1e293b', color: '#fff', padding: '14px', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', marginTop: '10px' };
-const toggleBtn = { background: 'none', border: 'none', color: '#2563eb', marginTop: '25px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', width: '100%' };
-const errText = { color: '#ef4444', fontSize: '11px', fontWeight: '600' };
+const navStyle = { padding: '15px 5%', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center' };
+const devTag = { fontSize: '10px', background: '#fefce8', color: '#854d0e', padding: '2px 8px', borderRadius: '4px', marginLeft: '10px', border: '1px solid #fef08a' };
+const modalOverlay = { position: 'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(15, 23, 42, 0.7)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:2000 };
+const modalContent = { background:'#fff', width:'550px', maxHeight:'85vh', borderRadius:'20px', display:'flex', flexDirection:'column', overflow:'hidden' };
+const modalHeader = { padding:'20px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' };
+const formBody = { padding:'20px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'12px' };
+const sectionLabel = { fontSize:'10px', fontWeight:'800', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'1px', marginTop:'10px', display:'flex', alignItems:'center', gap:'5px' };
+const grid2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' };
+const input = { padding:'10px', borderRadius:'8px', border:'1px solid #e2e8f0', fontSize:'13px', outline:'none' };
+const submitBtn = { padding:'16px', background:'#1e293b', color:'#fff', border:'none', borderRadius:'10px', fontWeight:'bold', cursor:'pointer', marginTop:'15px', display:'flex', justifyContent:'center' };
+const closeBtn = { background:'none', border:'none', cursor:'pointer' };
