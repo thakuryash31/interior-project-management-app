@@ -1,121 +1,150 @@
-import React, { useState } from 'react';
-import { supabase } from './supabase';
-import Dashboard from './Dashboard';
-import ProjectDetails from './ProjectDetails';
-import { X, MapPin, User, Globe, Loader2 } from 'lucide-react';
-
-// --- CONSTANTS ---
-const INDIAN_STATES = ["Maharashtra", "Karnataka", "Delhi", "Gujarat", "Tamil Nadu", "Telangana", "West Bengal", "Other"];
-const POPULAR_CITIES = ["Mumbai", "Bengaluru", "Delhi", "Hyderabad", "Ahmedabad", "Chennai", "Kolkata", "Pune", "Surat", "Jaipur", "Lucknow", "Other"];
+import React from 'react';
+import './App.css';
+import { useAppLogic } from './hooks/useAppLogic';
+import Dashboard from './components/Dashboard';
+import ProjectDetails from './components/ProjectDetails';
+import { 
+  X, MapPin, User, Loader2, Building, Copy, 
+  Layout, Settings, LogOut, CheckCircle2 
+} from 'lucide-react';
 
 export default function App() {
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const [form, setForm] = useState({
-    projectName: '', customerName: '', customerEmail: '', customerPhone: '',
-    billingAddress: '', billingCity: 'Mumbai', billingState: 'Maharashtra', billingPincode: '', billingCountry: 'India',
-    projectCity: 'Mumbai', projectState: 'Maharashtra', projectPincode: '', projectCountry: 'India'
-  });
-
-  const handleCreateProject = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const prefix = (form.projectCity || "PRJ").substring(0, 3).toUpperCase();
-      const { data: lastProjects } = await supabase
-        .from('projects')
-        .select('project_id')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      let nextNum = 1000000001;
-      if (lastProjects && lastProjects.length > 0) {
-        const lastFullId = lastProjects[0].project_id;
-        if (lastFullId.includes('-')) {
-          nextNum = parseInt(lastFullId.split('-')[1]) + 1;
-        }
-      }
-      const customId = `${prefix}-${nextNum}`;
-
-      const { data, error } = await supabase.from('projects').insert([{
-        project_id: customId,
-        project_name: form.projectName,
-        customer_name: form.customerName,
-        customer_email: form.customerEmail,
-        customer_phone: form.customerPhone,
-        billing_address: form.billingAddress,
-        billing_city: form.billingCity,
-        billing_state: form.billingState,
-        billing_pincode: form.billingPincode,
-        billing_country: form.billingCountry,
-        project_city: form.projectCity,
-        project_state: form.projectState,
-        project_pincode: form.projectPincode,
-        project_country: form.projectCountry,
-        current_sub_step: 1
-      }]).select();
-
-      if (error) throw error;
-      setShowCreateModal(false);
-      if (data) setSelectedProject(data[0]);
-    } catch (err) {
-      alert("Error: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    selectedProject, setSelectedProject,
+    showCreateModal, setShowCreateModal,
+    loading,
+    form, setForm,
+    locationOptions, availableStates,
+    handleCityChange, copyBillingToSite,
+    handleUpdateProject, handleCreateProject
+  } = useAppLogic();
 
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
-      <nav style={{ padding: '15px 5%', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between' }}>
-        <div style={{fontWeight:'900', fontSize:'20px', color:'#1e293b'}}>
-          ProjectFlow <span style={{fontSize:'10px', background:'#fefce8', color:'#854d0e', padding:'2px 8px', borderRadius:'4px', marginLeft:'10px'}}>DEVELOPMENT MODE</span>
+    <div className="app-wrapper">
+      
+      {/* 1. SAAS SIDEBAR */}
+      <aside className="sidebar">
+        <div className="brand-container">
+          <div className="brand-logo"><Layout size={20} /></div>
+          <span className="brand-name">ProjectFlow</span>
         </div>
-      </nav>
 
-      {!selectedProject ? (
-        <Dashboard 
-          onSelectProject={(proj) => setSelectedProject(proj)} 
-          onCreateNew={() => setShowCreateModal(true)} 
-        />
-      ) : (
-        <ProjectDetails 
-          project={selectedProject} 
-          onBack={() => setSelectedProject(null)} 
-        />
-      )}
+        <div className="nav-links">
+          <div className={`nav-item ${!selectedProject ? 'active' : ''}`} onClick={() => setSelectedProject(null)}>
+            <Layout size={18} /> Dashboard
+          </div>
+          <div className="nav-item">
+            <CheckCircle2 size={18} /> My Tasks
+          </div>
+          <div className="nav-item">
+            <Settings size={18} /> Settings
+          </div>
+        </div>
 
+        <div style={{marginTop: 'auto'}}>
+          <div className="nav-item">
+            <LogOut size={18} /> Logout
+          </div>
+        </div>
+      </aside>
+
+      {/* 2. MAIN WORKSPACE */}
+      <main className="main-content">
+        {!selectedProject ? (
+          <Dashboard 
+            onSelectProject={setSelectedProject} 
+            onCreateNew={() => setShowCreateModal(true)} 
+          />
+        ) : (
+          <ProjectDetails 
+            project={selectedProject} 
+            onBack={() => setSelectedProject(null)} 
+            updateProjectData={handleUpdateProject} 
+          />
+        )}
+      </main>
+
+      {/* 3. CREATE PROJECT MODAL */}
       {showCreateModal && (
-        <div style={modalOverlay}>
-          <div style={modalContent}>
-            <div style={modalHeader}>
-              <h2 style={{margin:0, fontSize:'18px'}}>Create New Project</h2>
-              <button onClick={() => setShowCreateModal(false)} style={{background:'none', border:'none', cursor:'pointer'}}><X /></button>
-            </div>
-            <form onSubmit={handleCreateProject} style={formBody}>
-              <div style={sectionLabel}>Client Information</div>
-              <div style={grid2}>
-                <input required placeholder="Project Name" style={input} onChange={e => setForm({...form, projectName: e.target.value})} />
-                <input required placeholder="Customer Name" style={input} onChange={e => setForm({...form, customerName: e.target.value})} />
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <div className="modal-header">
+              <div className="modal-title">
+                <h2>Create New Project</h2>
+                <p>Fill in the details to initialize the workspace</p>
               </div>
-              <button type="submit" style={submitBtn} disabled={loading}>
-                {loading ? <Loader2 className="animate-spin" size={20}/> : "Initialize Project"}
-              </button>
+              <button onClick={() => setShowCreateModal(false)} className="btn-ghost" style={{padding:8}}><X size={20}/></button>
+            </div>
+            
+            <form id="createForm" onSubmit={handleCreateProject} className="modal-body">
+              
+              {/* SECTION A: CLIENT */}
+              <div className="input-group">
+                <div className="label-header">
+                   <span className="field-label"><User size={14} color="#6366f1"/> Client Details</span>
+                </div>
+                <div className="form-grid-2">
+                   <input required className="saas-input" placeholder="Project Name (e.g. Villa Renovation)" value={form.projectName} onChange={e => setForm({...form, projectName: e.target.value})} />
+                   <input required className="saas-input" placeholder="Client Full Name" value={form.customerName} onChange={e => setForm({...form, customerName: e.target.value})} />
+                </div>
+                <div className="form-grid-2" style={{marginTop: 15}}>
+                   <input required type="email" className="saas-input" placeholder="Client Email" value={form.customerEmail} onChange={e => setForm({...form, customerEmail: e.target.value})} />
+                   <input required type="tel" className="saas-input" placeholder="Client Phone" value={form.customerPhone} onChange={e => setForm({...form, customerPhone: e.target.value})} />
+                </div>
+              </div>
+
+              {/* SECTION B: BILLING */}
+              <div className="input-group">
+                <div className="label-header">
+                   <span className="field-label"><Building size={14} color="#6366f1"/> Billing Address</span>
+                </div>
+                <input required className="saas-input" style={{marginBottom: 15}} placeholder="Street Address / Flat No." value={form.billingAddress} onChange={e => setForm({...form, billingAddress: e.target.value})} />
+                
+                <div className="form-grid-3">
+                  <select required className="saas-input" value={form.billingCity} onChange={e => handleCityChange('billing', e.target.value)}>
+                    <option value="">Select City</option>
+                    {locationOptions.map(l => <option key={l.city_name} value={l.city_name}>{l.city_name}</option>)}
+                  </select>
+                  <select required className="saas-input" value={form.billingState} onChange={e => setForm({...form, billingState: e.target.value})}>
+                    <option value="">Select State</option>
+                    {availableStates.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <input required className="saas-input" placeholder="Pincode" value={form.billingPincode} onChange={e => setForm({...form, billingPincode: e.target.value})} />
+                </div>
+              </div>
+
+              {/* SECTION C: SITE */}
+              <div className="input-group">
+                <div className="label-header">
+                   <span className="field-label"><MapPin size={14} color="#6366f1"/> Site Location</span>
+                   <button type="button" onClick={copyBillingToSite} className="copy-btn"><Copy size={12}/> Copy from Billing</button>
+                </div>
+                <input required className="saas-input" style={{marginBottom: 15}} placeholder="Site Street Address" value={form.projectAddress} onChange={e => setForm({...form, projectAddress: e.target.value})} />
+                
+                <div className="form-grid-3">
+                  <select required className="saas-input" value={form.projectCity} onChange={e => handleCityChange('project', e.target.value)}>
+                    <option value="">Select City</option>
+                    {locationOptions.map(l => <option key={l.city_name} value={l.city_name}>{l.city_name}</option>)}
+                  </select>
+                  <select required className="saas-input" value={form.projectState} onChange={e => setForm({...form, projectState: e.target.value})}>
+                    <option value="">Select State</option>
+                    {availableStates.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <input required className="saas-input" placeholder="Pincode" value={form.projectPincode} onChange={e => setForm({...form, projectPincode: e.target.value})} />
+                </div>
+              </div>
+
             </form>
+
+            <div className="modal-footer">
+               <button onClick={() => setShowCreateModal(false)} className="btn btn-secondary">Cancel</button>
+               <button type="submit" form="createForm" className="btn btn-primary" disabled={loading}>
+                {loading ? <Loader2 className="animate-spin" size={18}/> : "Create Project"}
+               </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
-
-const modalOverlay = { position: 'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(15, 23, 42, 0.7)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:2000 };
-const modalContent = { background:'#fff', width:'450px', borderRadius:'20px', overflow:'hidden' };
-const modalHeader = { padding:'20px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' };
-const formBody = { padding:'20px', display:'flex', flexDirection:'column', gap:'12px' };
-const sectionLabel = { fontSize:'10px', fontWeight:'800', color:'#94a3b8', textTransform:'uppercase' };
-const grid2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' };
-const input = { padding:'10px', borderRadius:'8px', border:'1px solid #e2e8f0', fontSize:'13px', outline:'none' };
-const submitBtn = { padding:'16px', background:'#1e293b', color:'#fff', border:'none', borderRadius:'10px', fontWeight:'bold', cursor:'pointer' };
