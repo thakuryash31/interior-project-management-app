@@ -1,33 +1,34 @@
 import React, { useState } from 'react';
+import './App.css'; 
+
+// 1. Context & Hooks
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { usePermission } from './hooks/usePermission';
-import { supabase } from './supabase';
-import './App.css';
-
-// Logic Hook
 import { useAppLogic } from './hooks/useAppLogic';
+import { usePermission } from './hooks/usePermission'; 
 
-// Components
+// 2. Components
 import Dashboard from './components/Dashboard';
 import ProjectDetails from './components/ProjectDetails';
 import SuperAdminDashboard from './components/admin/SuperAdminDashboard';
 import UserManagement from './components/admin/UserManagement';
-import Auth from './components/Auth'; // Ensure you have a login component
+import Auth from './components/Auth';
 
-// Icons
+// 3. Icons
 import { 
   X, MapPin, User, Loader2, Building, Copy, 
-  Layout, Settings, LogOut, CheckCircle2, Users
+  Layout, Settings, LogOut, CheckCircle2, Users, RefreshCw 
 } from 'lucide-react';
 
+// --- MAIN CONTENT COMPONENT ---
 function MainAppContent() {
-  const { user, loading: authLoading } = useAuth();
-  const { role, can } = usePermission();
+  // Get Auth State & Dev Tools
+  const { user, role, loading: authLoading, logout, toggleRole } = useAuth();
+  const { can } = usePermission(); // Keep permission checks
   
-  // State for switching views (Dashboard vs Team vs Settings)
-  const [currentView, setCurrentView] = useState('dashboard');
+  // Local View State
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' | 'users'
 
-  // Your existing app logic (Preserved)
+  // App Logic (Project Management)
   const {
     selectedProject, setSelectedProject,
     showCreateModal, setShowCreateModal,
@@ -38,26 +39,65 @@ function MainAppContent() {
     handleUpdateProject, handleCreateProject
   } = useAppLogic();
 
-  // 1. LOADING SCREEN
-  if (authLoading) return <div className="loading-screen"><Loader2 className="animate-spin" /> Loading App...</div>;
+  // --- FLOATING DEV BUTTON COMPONENT ---
+  const DevSwitcher = () => (
+    <div 
+      onClick={toggleRole}
+      style={{
+        position: 'fixed', bottom: 20, right: 20, 
+        background: '#0f172a', color: '#fff', padding: '10px 16px', 
+        borderRadius: 30, cursor: 'pointer', 
+        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+        display: 'flex', alignItems: 'center', gap: 10, 
+        fontSize: 13, fontWeight: 600, zIndex: 9999,
+        border: '1px solid #334155'
+      }}
+    >
+      <div style={{
+        width: 10, height: 10, borderRadius: '50%', 
+        background: role === 'super_admin' ? '#ef4444' : '#22c55e',
+        boxShadow: role === 'super_admin' ? '0 0 8px #ef4444' : '0 0 8px #22c55e'
+      }}></div>
+      <span>{role === 'super_admin' ? 'Mode: Super Admin' : 'Mode: Manager'}</span>
+      <RefreshCw size={14} style={{opacity: 0.7}}/>
+    </div>
+  );
 
-  // 2. LOGIN SCREEN (If not logged in)
-  if (!user) return <Auth />;
-
-  // 3. SUPER ADMIN VIEW (Completely separate interface)
-  if (role === 'super_admin') {
+  // 1. LOADING STATE
+  if (authLoading) {
     return (
-      <div className="app-wrapper">
-         <SuperAdminDashboard />
-         {/* Simple Logout for Super Admin */}
-         <div style={{position:'fixed', bottom:20, left:20}}>
-            <button className="btn btn-secondary" onClick={() => supabase.auth.signOut()}>Sign Out</button>
-         </div>
+      <div style={{height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#64748b'}}>
+        <Loader2 className="animate-spin" size={32} style={{marginRight: 10}}/>
+        <span>Loading Application...</span>
       </div>
     );
   }
 
-  // 4. STANDARD WORKSPACE (Designers, Managers, Admins)
+  // 2. UNAUTHENTICATED STATE (Show Login)
+  if (!user) {
+    return <Auth />;
+  }
+
+  // 3. SUPER ADMIN STATE (Separate Dashboard)
+  if (role === 'super_admin') {
+    return (
+      <div className="app-wrapper">
+         <SuperAdminDashboard />
+         
+         {/* Super Admin Logout */}
+         <div style={{position:'fixed', bottom: 20, left: 20, zIndex: 100}}>
+            <button className="btn btn-secondary" onClick={logout}>
+              <LogOut size={16} style={{marginRight:8}}/> Sign Out
+            </button>
+         </div>
+
+         {/* Dev Switcher */}
+         <DevSwitcher />
+      </div>
+    );
+  }
+
+  // 4. STANDARD APP STATE (Managers, Designers, etc.)
   return (
     <div className="app-wrapper">
       
@@ -69,7 +109,7 @@ function MainAppContent() {
         </div>
 
         <div className="nav-links">
-          {/* Dashboard Tab */}
+          {/* Dashboard Link */}
           <div 
             className={`nav-item ${currentView === 'dashboard' && !selectedProject ? 'active' : ''}`} 
             onClick={() => { setCurrentView('dashboard'); setSelectedProject(null); }}
@@ -77,8 +117,8 @@ function MainAppContent() {
             <Layout size={18} /> Dashboard
           </div>
 
-          {/* NEW: Team Tab (Only for Admins) */}
-          {can('manage_users') && (
+          {/* Team Management Link (Only if allowed) */}
+          {(can('manage_users') || role === 'admin') && (
             <div 
               className={`nav-item ${currentView === 'users' ? 'active' : ''}`} 
               onClick={() => { setCurrentView('users'); setSelectedProject(null); }}
@@ -96,7 +136,7 @@ function MainAppContent() {
         </div>
 
         <div style={{marginTop: 'auto'}}>
-          <div className="nav-item" onClick={() => supabase.auth.signOut()}>
+          <div className="nav-item" onClick={logout}>
             <LogOut size={18} /> Logout
           </div>
         </div>
@@ -123,13 +163,16 @@ function MainAppContent() {
         : (
           <Dashboard 
             onSelectProject={setSelectedProject} 
-            // Only allow creating projects if they have permission
-            onCreateNew={can('create_projects') ? () => setShowCreateModal(true) : undefined} 
+            // Check permission or role for "Create" button
+            onCreateNew={(can('create_projects') || role === 'admin') ? () => setShowCreateModal(true) : undefined} 
           />
         )}
       </main>
 
-      {/* CREATE PROJECT MODAL (Preserved from your code) */}
+      {/* Dev Switcher */}
+      <DevSwitcher />
+
+      {/* CREATE PROJECT MODAL */}
       {showCreateModal && (
         <div className="modal-overlay">
           <div className="modal-card">
@@ -212,7 +255,7 @@ function MainAppContent() {
   );
 }
 
-// 5. ROOT COMPONENT (Wraps everything in Context)
+// --- ROOT APP EXPORT ---
 export default function App() {
   return (
     <AuthProvider>

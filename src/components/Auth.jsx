@@ -1,140 +1,83 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase';
-import { Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
+import { Layout, Loader2 } from 'lucide-react';
 
 export default function Auth() {
+  const [isLogin, setIsLogin] = useState(true); // Toggle State
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(null);
+  const [fullName, setFullName] = useState('');
 
-  const handleLogin = async (e) => {
+  const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      if (isLogin) {
+        // --- LOGIN LOGIC ---
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        // --- SIGN UP LOGIC (New Super Admin) ---
+        // 1. Create Auth User
+        const { data: { user }, error: authError } = await supabase.auth.signUp({ 
+          email, 
+          password 
+        });
+        if (authError) throw authError;
 
-      if (error) throw error;
-      // The AuthContext in App.jsx will automatically detect the login 
-      // and switch the view to Dashboard.
+        // 2. Create Profile (As Super Admin)
+        // Note: For a real app, you'd hide this or require a secret code.
+        const { error: profileError } = await supabase.from('profiles').insert([{
+          id: user.id,
+          email: email,
+          full_name: fullName,
+          role: 'super_admin', // <--- Creates you as Super Admin
+          organization_id: '00000000-0000-0000-0000-000000000000' // System Org
+        }]);
+        
+        if (profileError) throw profileError;
+        alert("Account created! Please Log In.");
+        setIsLogin(true); // Switch to login view
+      }
     } catch (err) {
-      setError(err.message);
+      alert(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      minHeight: '100vh', 
-      background: 'var(--bg-app)'
-    }}>
-      <div style={{
-        width: '100%', 
-        maxWidth: '400px', 
-        padding: '40px', 
-        background: 'var(--bg-surface)', 
-        borderRadius: 'var(--radius-lg)', 
-        boxShadow: 'var(--shadow-float)',
-        border: '1px solid var(--border)'
-      }}>
-        
-        {/* Header */}
-        <div style={{textAlign: 'center', marginBottom: 30}}>
-          <div style={{
-            width: 48, height: 48, background: 'var(--primary)', 
-            borderRadius: 12, margin: '0 auto 15px auto', 
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', fontWeight: 'bold', fontSize: 24
-          }}>
-            P
+    <div style={{height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9'}}>
+      <div className="modal-card" style={{width: 400, padding: 40}}>
+        <div style={{display:'flex', flexDirection:'column', alignItems:'center', marginBottom:30}}>
+          <div style={{background: '#4f46e5', padding: 10, borderRadius: 12, marginBottom: 15}}>
+            <Layout color="white" size={28}/>
           </div>
-          <h2 style={{margin: '0 0 5px 0', fontSize: 24, fontWeight: 700}}>Welcome back</h2>
-          <p style={{margin: 0, color: 'var(--text-secondary)'}}>Sign in to your workspace</p>
+          <h1 style={{fontSize: 24, fontWeight: 700, color: '#0f172a'}}>ProjectFlow</h1>
+          <p style={{color: '#64748b'}}>{isLogin ? 'Welcome back, Admin' : 'Create Super Admin Account'}</p>
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div style={{
-            padding: '12px', background: '#fef2f2', border: '1px solid #fecaca', 
-            borderRadius: 'var(--radius-md)', color: '#991b1b', fontSize: '13px',
-            marginBottom: '20px', textAlign: 'center'
-          }}>
-            {error}
-          </div>
-        )}
-
-        {/* Form */}
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleAuth} style={{display:'flex', flexDirection:'column', gap: 15}}>
+          {!isLogin && (
+            <input required placeholder="Full Name" className="saas-input" value={fullName} onChange={e => setFullName(e.target.value)} />
+          )}
+          <input required type="email" placeholder="Email Address" className="saas-input" value={email} onChange={e => setEmail(e.target.value)} />
+          <input required type="password" placeholder="Password" className="saas-input" value={password} onChange={e => setPassword(e.target.value)} />
           
-          <div style={{marginBottom: 20}}>
-            <label style={{display:'block', fontSize:12, fontWeight:600, marginBottom:8, color:'var(--text-secondary)'}}>
-              EMAIL ADDRESS
-            </label>
-            <div style={{position: 'relative'}}>
-              <Mail size={16} color="var(--text-secondary)" style={{position: 'absolute', left: 12, top: 12}} />
-              <input 
-                type="email" 
-                required
-                placeholder="name@company.com" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={{
-                  width: '100%', padding: '10px 10px 10px 38px', 
-                  borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
-                  outline: 'none', fontSize: 14, boxSizing: 'border-box'
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{marginBottom: 25}}>
-            <label style={{display:'block', fontSize:12, fontWeight:600, marginBottom:8, color:'var(--text-secondary)'}}>
-              PASSWORD
-            </label>
-            <div style={{position: 'relative'}}>
-              <Lock size={16} color="var(--text-secondary)" style={{position: 'absolute', left: 12, top: 12}} />
-              <input 
-                type="password" 
-                required
-                placeholder="••••••••" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={{
-                  width: '100%', padding: '10px 10px 10px 38px', 
-                  borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
-                  outline: 'none', fontSize: 14, boxSizing: 'border-box'
-                }}
-              />
-            </div>
-          </div>
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            style={{
-              width: '100%', padding: '12px', background: 'var(--primary)', 
-              color: 'white', border: 'none', borderRadius: 'var(--radius-md)',
-              fontSize: 14, fontWeight: 600, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              transition: 'background 0.2s'
-            }}
-          >
-            {loading ? <Loader2 className="animate-spin" size={18}/> : <>Sign In <ArrowRight size={18}/></>}
+          <button type="submit" className="btn btn-primary" style={{justifyContent:'center'}} disabled={loading}>
+            {loading ? <Loader2 className="animate-spin"/> : (isLogin ? 'Sign In' : 'Create Account')}
           </button>
-
         </form>
-        
-        <div style={{marginTop: 20, textAlign: 'center', fontSize: 13, color: 'var(--text-secondary)'}}>
-          Need an account? Contact your Organization Admin.
+
+        <div style={{marginTop: 20, textAlign: 'center', fontSize: 14, color: '#64748b'}}>
+          {isLogin ? "Don't have an account? " : "Already have an account? "}
+          <span 
+            onClick={() => setIsLogin(!isLogin)} 
+            style={{color: '#4f46e5', fontWeight: 600, cursor: 'pointer'}}>
+            {isLogin ? 'Sign Up' : 'Log In'}
+          </span>
         </div>
       </div>
     </div>

@@ -1,6 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://fjsbtkvsyufhtlaepxxq.supabase.co'
-const supabaseAnonKey = 'sb_publishable_reFD-S0w9X30Q1C3rs7pFg_gbt85Xwe'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+if (!supabaseUrl || !supabaseKey) {
+  console.error("CRITICAL ERROR: Supabase URL or Key is missing!");
+  console.error("Make sure you have a .env file with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY");
+}
+
+export const supabase = createClient(supabaseUrl, supabaseKey);

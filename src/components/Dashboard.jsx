@@ -13,7 +13,7 @@ export default function Dashboard({ onSelectProject, onCreateNew }) {
   const { can } = usePermission(); // <--- Check Permissions
 
   useEffect(() => {
-    fetchProjects();
+    // fetchProjects();
   }, []);
 
   async function fetchProjects() {
